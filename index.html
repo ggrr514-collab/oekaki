@@ -74,7 +74,7 @@
     padding:12px;display:flex;flex-direction:column;gap:10px;}
   .avaTopRow{display:flex;gap:14px;align-items:flex-start;}
   .avaWrap{position:relative;flex:none;width:84px;}
-  #avaFace{width:100%;display:block;border-radius:12px;background:#fff;filter:drop-shadow(0 4px 8px rgba(0,0,0,.35));}
+  #avaFace, #avaFaceDisp{width:100%;display:block;border-radius:12px;background:#fff;filter:drop-shadow(0 4px 8px rgba(0,0,0,.35));}
   .avaBubble{position:relative;flex:0 1 auto;width:fit-content;max-width:calc(100% - 100px);background:var(--paper);color:var(--ink);
     border-radius:10px;padding:12px 16px;font-size:15px;font-weight:700;
     line-height:1.5;border:2px solid var(--mascot-blue);align-self:center;
@@ -187,7 +187,7 @@
       <p style="font-family:'Yusei Magic';font-size:22px;color:var(--gold);margin-top:14px;" id="resultNameDisp"></p>
     </div>
 
-    <div style="margin-top:14px;background:var(--stage-2);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;gap:14px;align-items:flex-start;">
+    <div style="margin-top:14px;background:var(--stage-2);border:1px solid var(--line);border-radius:14px;padding:12px;" class="avaTopRow">
       <div class="avaWrap"><img id="avaFaceDisp" alt="アバター"/></div>
       <div class="avaBubble hide" id="avaBubbleDisp"></div>
     </div>
@@ -243,6 +243,7 @@
       <button class="btn" id="btnVote" style="width:auto" onclick="startVote()">③ 投票を始める</button>
       <button class="btn" id="btnFinal" style="width:auto" onclick="startFinal()">④ ファイナリスト発表</button>
       <button class="btn" id="btnResult" style="width:auto" onclick="startResult()">⑤ 優勝決定</button>
+      <button class="tool-btn" id="btnBackToLobby" style="width:auto" onclick="returnToLobby()">🌙 待機画面に戻る</button>
       <span class="closehint hide" id="closeHint">全員提出しました！</span>
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:10px;">
@@ -256,10 +257,11 @@
       <button class="tool-btn" style="width:auto" onclick="playEndCredits()">🎬 エンドロール</button>
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;">
-      <div id="queueChips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <div id="queueChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:110px;overflow-y:auto;width:100%;"></div>
     </div>
-    <div class="hide" id="queueEditor" style="background:var(--stage-2);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;">
-      <textarea id="queueTextarea" rows="5" placeholder="お題を1行に1つずつ入力" style="width:100%;background:var(--stage);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;"></textarea>
+    <div class="hide" id="queueEditor" style="background:var(--stage-2);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;position:relative;max-height:60vh;overflow-y:auto;">
+      <button class="tool-btn" style="position:absolute;top:10px;right:10px;width:auto;" onclick="$('queueEditor').classList.add('hide')">✕ 閉じる</button>
+      <textarea id="queueTextarea" rows="5" placeholder="お題を1行に1つずつ入力" style="width:100%;margin-top:30px;background:var(--stage);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="tool-btn" style="width:auto" onclick="saveQueueFromTextarea()">保存</button>
         <button class="tool-btn" style="width:auto" onclick="loadQueueFromLibrary()">お題ライブラリから読込</button>
@@ -1177,6 +1179,9 @@ async function autoLoop(){
     await startResult();
     if(!AUTO_RUNNING) break;
     await sleep(8000); // 結果表示の余韻
+    if(!AUTO_RUNNING) break;
+    await returnToLobby();
+    await sleep(5000); // 待機画面（過去作品・ランキング等）を少し見せる
   }
 }
 
@@ -1202,7 +1207,7 @@ function hostOnRoomChange(room){
 function updateHostButtons(phase){
   const set = (id, enabled)=>{ const b=$(id); if(b) b.disabled = !enabled; };
   if(AUTO_RUNNING){
-    ['btnStartDraw','btnClose','btnVote','btnFinal','btnResult'].forEach(id=>set(id,false));
+    ['btnStartDraw','btnClose','btnVote','btnFinal','btnResult','btnBackToLobby'].forEach(id=>set(id,false));
     return;
   }
   set('btnStartDraw', true); // 新しい問題はいつでも出せる（今の進行をリセットして次に進む）
@@ -1210,6 +1215,7 @@ function updateHostButtons(phase){
   set('btnVote',   phase==='closed');
   set('btnFinal',  phase==='vote1');
   set('btnResult', phase==='final');
+  set('btnBackToLobby', phase==='result');
 }
 
 function copyLink(){
@@ -1346,6 +1352,11 @@ async function startResult(){
       winEl.appendChild(b);
     }
   }
+}
+
+async function returnToLobby(){
+  const { error } = await sb.from('rooms').update({ phase: 'lobby' }).eq('id', ROOM_ID);
+  if(error){ alert('エラー: '+error.message); return; }
 }
 
 /* ===================== 過去の問題を見返す ===================== */
