@@ -177,6 +177,7 @@
         <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
         <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);" id="lobbyRoomCodeBig"></div>
         <div style="font-size:15px;color:var(--paper);margin-top:6px;word-break:break-all;" id="lobbyJoinUrl"></div>
+        <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);margin-top:10px;" id="lobbyHeadcountDisp"></div>
       </div>
       <div id="lobbyContent" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s;"></div>
     </div>
@@ -342,6 +343,7 @@
     <div style="text-align:center;margin-bottom:14px;">
       <p class="big" id="lobbyBig" style="margin:0;">お題が出るのを待っています<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
       <p class="sub" id="lobbyMsg" style="margin:4px 0 0;"></p>
+      <p class="sub" id="lobbyHeadcount" style="margin:6px 0 0;color:var(--gold);"></p>
     </div>
     <div id="playerLobbyContent" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s;min-height:200px;"></div>
     <div style="display:flex;gap:8px;margin-top:14px;">
@@ -780,6 +782,7 @@ function runDisplayMode(roomId){
   setAvaExprGeneric('avaFaceDisp', 'neutral');
   subscribeAvatarListener();
   subscribeDisplaySubmissions();
+  startHeadcountWatch();
 
   sb.from('rooms').select('*').eq('id', roomId).maybeSingle().then(({data, error})=>{
     console.log('[Display] 初期状態の取得結果:', data, error);
@@ -1459,6 +1462,25 @@ async function subscribePlayers(){
     .subscribe();
 }
 
+/* 待機画面(参加者・配信)向けの人数表示。ホスト画面とは別に、軽量に購読する */
+function startHeadcountWatch(){
+  if(window._headcountWatching) return;
+  window._headcountWatching = true;
+  const refresh = async ()=>{
+    const { data } = await sb.from('players').select('role').eq('room_id', ROOM_ID);
+    const rows = data||[];
+    const drawers = rows.filter(r=>r.role==='drawer').length;
+    const voters = rows.filter(r=>r.role==='voter').length;
+    const text = '🎨 描き手 '+drawers+' 人　👀 見る人 '+voters+' 人';
+    const a = $('lobbyHeadcount'); if(a) a.textContent = text;
+    const b = $('lobbyHeadcountDisp'); if(b) b.textContent = text;
+  };
+  refresh();
+  sb.channel('headcount-'+ROOM_ID)
+    .on('postgres_changes', { event:'*', schema:'public', table:'players', filter:'room_id=eq.'+ROOM_ID }, refresh)
+    .subscribe();
+}
+
 function checkCloseHint(){
   const hint = $('closeHint');
   if(!hint) return;
@@ -1631,6 +1653,7 @@ async function joinRoom(role){
 
   $('playerJoin').classList.add('hide');
   subscribeRoom(playerOnRoomChange);
+  startHeadcountWatch();
 
   if(role === 'drawer'){
     // ホストが締め切っていない限り、いつ参加しても描いて提出できる
