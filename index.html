@@ -88,6 +88,8 @@
     border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;}
   .avaReactions button:hover{border-color:var(--gold);}
   .autobtn.on{background:var(--green);color:#0a2015;border-color:var(--green);}
+  .winnerMarqueeTrack{display:flex;gap:24px;width:max-content;animation:marquee 28s linear infinite;}
+  @keyframes marquee{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
   .voteBtn.done{background:var(--stage);color:var(--sub);box-shadow:none;}
   .thumb img{cursor:zoom-in;}
 
@@ -415,7 +417,6 @@
           style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
       </div>
       <p class="big" id="resultName" style="margin-top:16px;"></p>
-      <button class="tool-btn" style="margin-top:14px" onclick="shareResult()">📤 Xでシェアする</button>
     </div>
   </div>
 
@@ -903,7 +904,7 @@ function startLobbyIdle(){
   $('lobbyRoomCodeBig').textContent = ROOM_ID;
   $('lobbyJoinUrl').textContent = location.origin + location.pathname + '?room=' + encodeURIComponent(ROOM_ID);
 
-  window._lobbyWorksCache = null;
+  window._lobbyWinnersCache = null;
   window._lobbySlideIndex = 0;
   showNextLobbySlide();
   window._lobbySlideTimer = setInterval(showNextLobbySlide, 8000);
@@ -922,33 +923,48 @@ function stopLobbyIdle(){
   clearInterval(window._lobbyMurmurTimer);
 }
 
-const LOBBY_SLIDES = ['works','ranking','rules','prevWinner'];
+const LOBBY_SLIDES = ['winners','ranking','rules'];
 async function showNextLobbySlide(){
   const box = $('lobbyContent');
   box.style.opacity = '0';
   const type = LOBBY_SLIDES[window._lobbySlideIndex % LOBBY_SLIDES.length];
   window._lobbySlideIndex++;
   try{
-    if(type === 'works') await renderLobbyWorks(box);
+    if(type === 'winners') await renderLobbyWinners(box);
     else if(type === 'ranking') await renderLobbyRanking(box);
     else if(type === 'rules') renderLobbyRules(box);
-    else if(type === 'prevWinner') await renderLobbyPrevWinner(box);
   }catch(e){ console.warn('lobby slide error', e); }
   requestAnimationFrame(()=>{ box.style.opacity='1'; });
 }
 
-async function renderLobbyWorks(box){
-  if(!window._lobbyWorksCache){
-    const { data } = await sb.from('submissions').select('name, image_url, odai')
-      .eq('room_id', ROOM_ID).is('deleted_at', null).order('created_at', { ascending:false }).limit(30);
-    window._lobbyWorksCache = data || [];
+async function renderLobbyWinners(box){
+  if(!window._lobbyWinnersCache){
+    const { data: ledger } = await sb.from('point_ledger').select('round, device_id')
+      .eq('room_id', ROOM_ID).eq('points', 5).order('round', { ascending:true });
+    if(!ledger || ledger.length===0){
+      window._lobbyWinnersCache = [];
+    } else {
+      const rounds = [...new Set(ledger.map(l=>l.round))];
+      const { data: subs } = await sb.from('submissions').select('round, device_id, name, image_url, odai')
+        .eq('room_id', ROOM_ID).in('round', rounds).is('deleted_at', null);
+      const subMap = {};
+      (subs||[]).forEach(s=>{ subMap[s.round+'_'+s.device_id] = s; });
+      window._lobbyWinnersCache = ledger.map(l=>subMap[l.round+'_'+l.device_id]).filter(Boolean);
+    }
   }
-  if(window._lobbyWorksCache.length === 0){ return showNextLobbySlide(); }
-  const sub = window._lobbyWorksCache[Math.floor(Math.random()*window._lobbyWorksCache.length)];
+  if(window._lobbyWinnersCache.length === 0){ return showNextLobbySlide(); }
+
+  const card = (s)=>
+    '<div style="flex:none;width:200px;text-align:center;">'+
+      '<img src="'+s.image_url+'" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;background:#fff;"/>'+
+      '<div style="margin-top:6px;font-size:12px;color:var(--gold);">「'+escapeHtml(s.odai||'')+'」</div>'+
+      '<div style="font-size:12px;color:var(--paper);">'+escapeHtml(s.name)+'さん</div>'+
+    '</div>';
+  // 継ぎ目なくループさせるため、リストを2回並べる
+  const items = window._lobbyWinnersCache.map(card).join('') + window._lobbyWinnersCache.map(card).join('');
   box.innerHTML =
-    '<div style="font-family:\'Yusei Magic\';color:var(--sub);font-size:13px;margin-bottom:10px;">これまでの作品</div>'+
-    '<img src="'+sub.image_url+'" style="max-width:380px;width:100%;border-radius:12px;background:#fff;"/>'+
-    '<div style="margin-top:10px;font-family:\'Yusei Magic\';color:var(--gold);">「'+escapeHtml(sub.odai||'')+'」 '+escapeHtml(sub.name)+'さん</div>';
+    '<div style="font-family:\'Yusei Magic\';color:var(--gold);font-size:16px;margin-bottom:14px;">🏆 これまでの優勝作品</div>'+
+    '<div style="width:100%;overflow:hidden;"><div class="winnerMarqueeTrack">'+items+'</div></div>';
 }
 
 async function renderLobbyRanking(box){
@@ -973,20 +989,6 @@ function renderLobbyRules(box){
     '③ 一番花丸を集めた絵が優勝！<br>'+
     '④ 続けて参加すると、レベルが上がっていくよ</div>';
   displayAvaSay('参加はかんたん！さっそく描いてみよう', 'laugh');
-}
-
-async function renderLobbyPrevWinner(box){
-  const { data: rows } = await sb.from('point_ledger').select('device_id, round, room_id')
-    .eq('points', 5).order('awarded_at', { ascending:false }).limit(1);
-  if(!rows || rows.length===0){ return showNextLobbySlide(); }
-  const w = rows[0];
-  const { data: sub } = await sb.from('submissions').select('name, image_url, odai')
-    .eq('room_id', w.room_id).eq('round', w.round).eq('device_id', w.device_id).maybeSingle();
-  if(!sub){ return showNextLobbySlide(); }
-  box.innerHTML =
-    '<div style="font-family:\'Yusei Magic\';color:var(--sub);font-size:13px;margin-bottom:10px;">前回の優勝作品</div>'+
-    '<img src="'+sub.image_url+'" style="max-width:380px;width:100%;border-radius:12px;background:#fff;"/>'+
-    '<div style="margin-top:10px;font-family:\'Yusei Magic\';color:var(--gold);">「'+escapeHtml(sub.odai||'')+'」 '+escapeHtml(sub.name)+'さん</div>';
 }
 
 /* ===================== アバターの発言をControlからDisplayへ中継 ===================== */
@@ -1877,14 +1879,9 @@ function showLevelUpToast(info){
       'font-size:14px;box-shadow:0 8px 20px rgba(0,0,0,.4);display:flex;gap:10px;align-items:center;';
     document.body.appendChild(toast);
   }
-  toast.innerHTML = 'Lv.'+info.level+' '+info.title+' に到達！ '+
-    '<button style="background:#2a2410;color:#ffc62b;border:none;border-radius:8px;padding:6px 10px;font-family:inherit;cursor:pointer;" onclick="shareLevelUp('+info.level+',\''+info.title+'\')">Xでシェア</button>';
+  toast.textContent = 'Lv.'+info.level+' '+info.title+' に到達！';
   toast.style.display='flex';
   setTimeout(()=>{ toast.style.display='none'; }, 8000);
-}
-function shareLevelUp(level, title){
-  const text = encodeURIComponent('「お絵かき大喜利〈仮題〉」でLv.'+level+' '+title+' に到達！ #お絵かき大喜利');
-  window.open('https://twitter.com/intent/tweet?text='+text, '_blank');
 }
 let CURRENT_STAGE = 1;
 
@@ -2123,65 +2120,6 @@ function replayStrokes(canvas, strokesData, durationMs){
   requestAnimationFrame(frame);
 }
 
-/* ===================== SNSシェア ===================== */
-function drawStrokesScaled(ctx, strokesData, dx, dy, dw, dh){
-  ctx.save();
-  ctx.translate(dx, dy);
-  ctx.scale(dw/W, dh/H);
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
-  for(const st of (strokesData||[])){
-    const pts = st.points||[]; if(!pts.length) continue;
-    ctx.strokeStyle = st.color||'#000'; ctx.lineWidth = st.size||7;
-    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
-    if(pts.length===1) ctx.lineTo(pts[0].x+0.1, pts[0].y+0.1);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-async function shareResult(){
-  const info = window._lastResult;
-  if(!info){ alert('シェアする結果がありません'); return; }
-
-  const cv = document.createElement('canvas'); cv.width=800; cv.height=800;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#1b1e2b'; ctx.fillRect(0,0,800,800);
-  ctx.fillStyle = '#f5a623'; ctx.font = 'bold 40px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('お絵かき大喜利〈仮題〉', 400, 60);
-  ctx.fillText('第'+info.round+'問 優勝！', 400, 110);
-  if(info.odai){
-    ctx.font = '26px sans-serif'; ctx.fillStyle = '#fbf7ee';
-    ctx.fillText('お題「'+info.odai+'」', 400, 150);
-  }
-
-  if(info.strokes && Array.isArray(info.strokes) && info.strokes.length){
-    // 線データから直接描き直す（画像の読み込み失敗に左右されない）
-    drawStrokesScaled(ctx, info.strokes, 150, 175, 500, 360);
-  } else {
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    await new Promise(res=>{ img.onload=res; img.onerror=res; img.src = info.image_url; });
-    try{ ctx.drawImage(img, 150, 175, 500, 360); }catch(e){}
-  }
-
-  ctx.fillStyle = '#fbf7ee'; ctx.font = 'bold 34px sans-serif';
-  ctx.fillText(info.name+' さんの一枚！', 400, 590);
-  drawHanamaru(ctx, 640, 640, 2.6);
-
-  try{
-    cv.toBlob((blob)=>{
-      if(!blob){ alert('画像の生成に失敗しました'); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'oekaki-winner.png'; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    });
-  }catch(e){ alert('画像の生成に失敗しました: '+e.message); }
-
-  const text = encodeURIComponent('「お絵かき大喜利〈仮題〉」第'+info.round+'問、優勝は'+info.name+'さん！ #お絵かき大喜利');
-  window.open('https://twitter.com/intent/tweet?text='+text, '_blank');
-  alert('画像をダウンロードしました。Xの投稿画面に、その画像を添付してポストしてください（自動添付はできません）');
-}
 function drawHanamaru(ctx,cx,cy,scale){
   ctx.save(); ctx.translate(cx,cy); ctx.scale(scale,scale);
   ctx.strokeStyle='#e5352b'; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=7;
