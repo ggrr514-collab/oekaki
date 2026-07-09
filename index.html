@@ -337,12 +337,15 @@
   </div>
 
   <!-- ===== プレイヤー：ロビー待機 ===== -->
-  <div class="center hide" id="playerLobby">
-    <div class="panel" style="text-align:center">
-      <p class="big" id="lobbyBig">お題が出るのを待っています<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
-      <p class="sub" id="lobbyMsg"></p>
-      <button class="tool-btn" style="width:100%;margin-top:14px;padding:12px;" onclick="openPlayerGallery()">🖼 これまでの作品を見る</button>
-      <button class="tool-btn" style="width:100%;margin-top:8px;padding:12px;" onclick="openPlayerRanking()">🏆 ランキングを見る</button>
+  <div class="hide" id="playerLobby" style="flex:1;display:flex;flex-direction:column;padding:16px;overflow-y:auto;">
+    <div style="text-align:center;margin-bottom:14px;">
+      <p class="big" id="lobbyBig" style="margin:0;">お題が出るのを待っています<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
+      <p class="sub" id="lobbyMsg" style="margin:4px 0 0;"></p>
+    </div>
+    <div id="playerLobbyContent" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s;min-height:200px;"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerGallery()">🖼 作品一覧</button>
+      <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerRanking()">🏆 ランキング</button>
     </div>
   </div>
 
@@ -923,12 +926,31 @@ function stopLobbyIdle(){
   clearInterval(window._lobbyMurmurTimer);
 }
 
+/* 参加者(スマホ)側の待機画面でも、同じスライドを自動で回す */
+function startPlayerLobbyIdle(){
+  if(window._playerLobbyRunning) return;
+  window._playerLobbyRunning = true;
+  window._lobbyWinnersCache = null;
+  window._playerSlideIndex = 0;
+  renderLobbySlideInto($('playerLobbyContent'), '_playerSlideIndex');
+  window._playerSlideTimer = setInterval(
+    ()=>renderLobbySlideInto($('playerLobbyContent'), '_playerSlideIndex'), 8000);
+}
+function stopPlayerLobbyIdle(){
+  window._playerLobbyRunning = false;
+  clearInterval(window._playerSlideTimer);
+}
+
 const LOBBY_SLIDES = ['winners','ranking','rules'];
 async function showNextLobbySlide(){
-  const box = $('lobbyContent');
+  await renderLobbySlideInto($('lobbyContent'), '_lobbySlideIndex');
+}
+async function renderLobbySlideInto(box, stateKey){
+  if(!box) return;
   box.style.opacity = '0';
-  const type = LOBBY_SLIDES[window._lobbySlideIndex % LOBBY_SLIDES.length];
-  window._lobbySlideIndex++;
+  window[stateKey] = (window[stateKey]||0);
+  const type = LOBBY_SLIDES[window[stateKey] % LOBBY_SLIDES.length];
+  window[stateKey]++;
   try{
     if(type === 'winners') await renderLobbyWinners(box);
     else if(type === 'ranking') await renderLobbyRanking(box);
@@ -988,7 +1010,7 @@ function renderLobbyRules(box){
     '② できた絵に、面白いと思ったら花丸を贈る<br>'+
     '③ 一番花丸を集めた絵が優勝！<br>'+
     '④ 続けて参加すると、レベルが上がっていくよ</div>';
-  displayAvaSay('参加はかんたん！さっそく描いてみよう', 'laugh');
+  if(DISPLAY_MODE) displayAvaSay('参加はかんたん！さっそく描いてみよう', 'laugh');
 }
 
 /* ===================== アバターの発言をControlからDisplayへ中継 ===================== */
@@ -1623,11 +1645,9 @@ async function joinRoom(role){
       window._lastResultKey = room.round+'-result';
       showResult(room.winner_submission_id);
     } else if(room.phase === 'closed'){
-      $('playerLobby').classList.remove('hide');
-      $('lobbyMsg').textContent = name + ' さんとして待機中（この問題は締め切られました。次のお題をお待ちください）';
+      setLobby('お題が出るのを待っています', name + ' さんとして待機中（この問題は締め切られました。次のお題をお待ちください）');
     } else {
-      $('playerLobby').classList.remove('hide');
-      $('lobbyMsg').textContent = name + ' さんとして待機中';
+      setLobby('お題が出るのを待っています', name + ' さんとして待機中');
     }
   } else {
     // 視聴者（見る・投票だけ）：描画には呼ばれない。投票フェーズだけ反応する
@@ -1654,6 +1674,7 @@ function setLobby(bigText, msgText){
   $('lobbyBig').innerHTML = bigText + '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   $('lobbyMsg').textContent = msgText || '';
   $('playerLobby').classList.remove('hide');
+  startPlayerLobbyIdle();
 }
 
 function playerOnRoomChange(room){
@@ -1669,8 +1690,7 @@ function playerOnRoomChange(room){
       // 描いている最中に締め切られた → その場の絵を自動提出
       submitArt();
     } else if(!$('submittedScreen') || $('submittedScreen').classList.contains('hide')){
-      $('playerLobby').classList.remove('hide');
-      $('lobbyMsg').textContent = 'この問題は締め切られました。次のお題をお待ちください';
+      setLobby('お題が出るのを待っています', 'この問題は締め切られました。次のお題をお待ちください');
     }
   } else if(room.phase === 'vote1'){
     const key = room.round+'-1';
@@ -1697,6 +1717,7 @@ function playerOnRoomChange(room){
 
 function enterDraw(odai, startedAt, durationSec){
   CURRENT_ODAI = odai;
+  stopPlayerLobbyIdle();
   $('playerLobby').classList.add('hide');
   $('submittedScreen').classList.add('hide');
   $('drawScreen').classList.remove('hide');
@@ -1888,6 +1909,7 @@ let CURRENT_STAGE = 1;
 async function enterVote(round, stage, filterIds){
   stage = stage || 1;
   CURRENT_STAGE = stage;
+  stopPlayerLobbyIdle();
   ['playerLobby','drawScreen','submittedScreen'].forEach(id=>{ if($(id)) $(id).classList.add('hide'); });
   if($('resultScreen')) $('resultScreen').classList.add('hide');
   $('voteScreen').classList.remove('hide');
@@ -2142,6 +2164,7 @@ function drawHanamaru(ctx,cx,cy,scale){
 }
 
 async function showResult(winnerSubId){
+  stopPlayerLobbyIdle();
   ['playerLobby','drawScreen','submittedScreen','voteScreen'].forEach(id=>{ if($(id)) $(id).classList.add('hide'); });
   if(!winnerSubId){
     $('resultScreen').classList.remove('hide');
