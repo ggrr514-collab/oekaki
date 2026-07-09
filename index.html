@@ -89,6 +89,7 @@
   .avaReactions button:hover{border-color:var(--gold);}
   .autobtn.on{background:var(--green);color:#0a2015;border-color:var(--green);}
   .winnerMarqueeTrack{display:flex;gap:24px;width:max-content;animation:marquee 28s linear infinite;}
+  .winnerMarqueeTrack:hover, .winnerMarqueeTrack:active{animation-play-state:paused;}
   @keyframes marquee{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
   .voteBtn.done{background:var(--stage);color:var(--sub);box-shadow:none;}
   .thumb img{cursor:zoom-in;}
@@ -499,13 +500,30 @@ function openPlayerRanking(){
   $('playerRankingOverlay').classList.remove('hide');
   loadPlayerRanking('points');
 }
+async function resolveDeviceNames(ids){
+  // まず device_stats の last_name、無ければ提出作品の名前で補完する
+  const nameOf = {};
+  if(!ids.length) return nameOf;
+  const { data: stats } = await sb.from('device_stats').select('device_id, last_name').in('device_id', ids);
+  (stats||[]).forEach(s=>{ if(s.last_name) nameOf[s.device_id] = s.last_name; });
+  const missing = ids.filter(id=>!nameOf[id]);
+  if(missing.length){
+    const { data: subs } = await sb.from('submissions').select('device_id, name, created_at')
+      .in('device_id', missing).order('created_at', { ascending:false });
+    (subs||[]).forEach(s=>{ if(!nameOf[s.device_id] && s.name) nameOf[s.device_id] = s.name; });
+  }
+  return nameOf;
+}
+
 async function fetchRankingRows(type){
   let rows = [];
   if(type === 'points'){
     const { data, error } = await sb.from('device_stats')
       .select('device_id, last_name, total_hanamaru').order('total_hanamaru', { ascending:false }).limit(20);
     if(error) throw error;
-    rows = (data||[]).map(r=>({ device_id:r.device_id, name:r.last_name||'名無し', value:r.total_hanamaru, suffix:'pt', showLevel:true }));
+    const base = (data||[]);
+    const nameOf = await resolveDeviceNames(base.map(r=>r.device_id));
+    rows = base.map(r=>({ device_id:r.device_id, name:(r.last_name||nameOf[r.device_id]||'名無し'), value:r.total_hanamaru, suffix:'pt', showLevel:true }));
   } else if(type === 'submissions'){
     const { data, error } = await sb.from('submissions').select('device_id, name')
       .eq('room_id', ROOM_ID).is('deleted_at', null);
@@ -521,12 +539,7 @@ async function fetchRankingRows(type){
     const counts = {};
     (data||[]).forEach(r=>{ counts[r.device_id]=(counts[r.device_id]||0)+1; });
     const ids = Object.keys(counts);
-    let nameOf = {};
-    if(ids.length){
-      const { data: names, error: nameErr } = await sb.from('device_stats').select('device_id, last_name').in('device_id', ids);
-      if(nameErr) throw nameErr;
-      (names||[]).forEach(n=>{ nameOf[n.device_id]=n.last_name; });
-    }
+    const nameOf = await resolveDeviceNames(ids);
     rows = ids.map(id=>({ device_id:id, name:nameOf[id]||'名無し', value:counts[id], suffix:'回優勝' }))
       .sort((a,b)=>b.value-a.value).slice(0,20);
   }
@@ -967,7 +980,7 @@ async function renderLobbyWinners(box){
       window._lobbyWinnersCache = [];
     } else {
       const rounds = [...new Set(ledger.map(l=>l.round))];
-      const { data: subs } = await sb.from('submissions').select('round, device_id, name, image_url, odai')
+      const { data: subs } = await sb.from('submissions').select('id, round, device_id, name, image_url, odai, strokes')
         .eq('room_id', ROOM_ID).in('round', rounds).is('deleted_at', null);
       const subMap = {};
       (subs||[]).forEach(s=>{ subMap[s.round+'_'+s.device_id] = s; });
@@ -976,8 +989,12 @@ async function renderLobbyWinners(box){
   }
   if(window._lobbyWinnersCache.length === 0){ return showNextLobbySlide(); }
 
+  // モーダル(拡大＋リプレイ)で使えるよう登録しておく
+  window._subData = window._subData || {};
+  window._lobbyWinnersCache.forEach(s=>{ window._subData[s.id] = s; });
+
   const card = (s)=>
-    '<div style="flex:none;width:200px;text-align:center;">'+
+    '<div style="flex:none;width:200px;text-align:center;cursor:pointer;" onclick="openModal(\''+s.id+'\')">'+
       '<img src="'+s.image_url+'" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;background:#fff;"/>'+
       '<div style="margin-top:6px;font-size:12px;color:var(--gold);">「'+escapeHtml(s.odai||'')+'」</div>'+
       '<div style="font-size:12px;color:var(--paper);">'+escapeHtml(s.name)+'さん</div>'+
@@ -985,7 +1002,8 @@ async function renderLobbyWinners(box){
   // 継ぎ目なくループさせるため、リストを2回並べる
   const items = window._lobbyWinnersCache.map(card).join('') + window._lobbyWinnersCache.map(card).join('');
   box.innerHTML =
-    '<div style="font-family:\'Yusei Magic\';color:var(--gold);font-size:16px;margin-bottom:14px;">🏆 これまでの優勝作品</div>'+
+    '<div style="font-family:\'Yusei Magic\';color:var(--gold);font-size:16px;margin-bottom:8px;">🏆 これまでの優勝作品</div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-bottom:10px;">タップで大きく見られます</div>'+
     '<div style="width:100%;overflow:hidden;"><div class="winnerMarqueeTrack">'+items+'</div></div>';
 }
 
@@ -2026,16 +2044,15 @@ function openModal(submissionId){
   $('modalCount').textContent = count;
 
   const mBtn = $('modalVoteBtn');
-  if(!voteGalEl && hostGalEl){
-    // ホスト画面からの閲覧：投票はさせず、確認・拡大のみ
+  if(!voteGalEl){
+    // 投票ギャラリー以外（ホスト・配信・待機画面など）からの閲覧：確認・拡大のみ
     mBtn.classList.add('hide');
   } else {
     mBtn.classList.remove('hide');
     mBtn.classList.toggle('done', alreadyDone);
     mBtn.textContent = alreadyDone ? '✓ 花丸ずみ' : '花丸！';
     mBtn.onclick = ()=>{
-      if(voteGalEl){ castVote(submissionId, voteGalEl); }
-      else { mBtn.classList.add('done'); mBtn.textContent='✓ 花丸ずみ'; }
+      castVote(submissionId, voteGalEl);
     };
   }
 
