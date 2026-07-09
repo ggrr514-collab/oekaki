@@ -925,8 +925,12 @@ function startLobbyIdle(){
 
   window._lobbyWinnersCache = null;
   window._lobbySlideIndex = 0;
+  if(window._headcountRefresh) window._headcountRefresh();
   showNextLobbySlide();
-  window._lobbySlideTimer = setInterval(showNextLobbySlide, 8000);
+  window._lobbySlideTimer = setInterval(()=>{
+    if(window._headcountRefresh) window._headcountRefresh();
+    showNextLobbySlide();
+  }, 8000);
 
   const murmur = ()=>{
     const m = LOBBY_MURMURS[Math.floor(Math.random()*LOBBY_MURMURS.length)];
@@ -944,6 +948,8 @@ function stopLobbyIdle(){
 
 /* 参加者(スマホ)側の待機画面でも、同じスライドを自動で回す */
 function startPlayerLobbyIdle(){
+  startHeadcountWatch();
+  if(window._headcountRefresh) window._headcountRefresh();
   if(window._playerLobbyRunning) return;
   window._playerLobbyRunning = true;
   window._lobbyWinnersCache = null;
@@ -1467,14 +1473,17 @@ function startHeadcountWatch(){
   if(window._headcountWatching) return;
   window._headcountWatching = true;
   const refresh = async ()=>{
-    const { data } = await sb.from('players').select('role').eq('room_id', ROOM_ID);
+    const { data, error } = await sb.from('players').select('role').eq('room_id', ROOM_ID);
+    if(error){ console.warn('[人数] 取得エラー:', error); return; }
     const rows = data||[];
+    console.log('[人数] players取得:', rows.length, '件', rows);
     const drawers = rows.filter(r=>r.role==='drawer').length;
     const voters = rows.filter(r=>r.role==='voter').length;
     const text = '🎨 描き手 '+drawers+' 人　👀 見る人 '+voters+' 人';
     const a = $('lobbyHeadcount'); if(a) a.textContent = text;
     const b = $('lobbyHeadcountDisp'); if(b) b.textContent = text;
   };
+  window._headcountRefresh = refresh;
   refresh();
   sb.channel('headcount-'+ROOM_ID)
     .on('postgres_changes', { event:'*', schema:'public', table:'players', filter:'room_id=eq.'+ROOM_ID }, refresh)
