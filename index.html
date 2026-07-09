@@ -727,13 +727,25 @@ async function loadRecapRanking(type){
 }
 
 async function startStream(){
+  // 現在配信中かどうかを確認
+  const { data: room } = await sb.from('rooms').select('current_stream_id').eq('id', ROOM_ID).maybeSingle();
+
+  if(room && room.current_stream_id){
+    // 配信中 → 終了する
+    if(!confirm('配信を終了しますか？（連続参加のカウントが確定します）')) return;
+    const { error } = await sb.from('rooms').update({ current_stream_id: null }).eq('id', ROOM_ID);
+    if(error){ alert('エラー: '+error.message); return; }
+    $('btnStartStream').textContent = '📡 配信を開始';
+    return;
+  }
+
+  // 配信していない → 開始する
   const label = new Date().toLocaleDateString('ja-JP', { month:'numeric', day:'numeric' }) + '配信';
   const { data: stream, error } = await sb.from('streams').insert({ label }).select().single();
   if(error){ alert('エラー: '+error.message); return; }
   const { error: err2 } = await sb.from('rooms').update({ current_stream_id: stream.id }).eq('id', ROOM_ID);
   if(err2){ alert('エラー: '+err2.message); return; }
-  $('btnStartStream').textContent = '📡 配信中：'+label;
-  $('btnStartStream').disabled = true;
+  $('btnStartStream').textContent = '📡 配信を終了：'+label;
 }
 
 function runHostSetup(){ $('hostCreate').classList.remove('hide'); }
@@ -767,7 +779,7 @@ async function createRoom(){
     hostOnRoomChange(freshRoom);
     if(freshRoom.current_stream_id){
       const { data: stream } = await sb.from('streams').select('label').eq('id', freshRoom.current_stream_id).maybeSingle();
-      if(stream){ $('btnStartStream').textContent = '📡 配信中：'+stream.label; $('btnStartStream').disabled = true; }
+      if(stream){ $('btnStartStream').textContent = '📡 配信を終了：'+stream.label; }
     }
   }
   initAvatar();
@@ -1479,7 +1491,7 @@ function startHeadcountWatch(){
     console.log('[人数] players取得:', rows.length, '件', rows);
     const drawers = rows.filter(r=>r.role==='drawer').length;
     const voters = rows.filter(r=>r.role==='voter').length;
-    const text = '🎨 描き手 '+drawers+' 人　👀 見る人 '+voters+' 人';
+    const text = '🎨 描き手 '+drawers+' 人　👀 見てる人 '+voters+' 人';
     const a = $('lobbyHeadcount'); if(a) a.textContent = text;
     const b = $('lobbyHeadcountDisp'); if(b) b.textContent = text;
   };
