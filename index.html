@@ -1808,6 +1808,16 @@ async function joinRoom(role){
   if(!name){ setStatus('joinStatus','名前を入れてください','err'); return; }
   if(containsNgWord(name)){ setStatus('joinStatus','その名前は使用できません','err'); return; }
 
+  // 認証(匿名サインイン)が本当に完了しているか念のため確認。
+  // まだなら完了させてから進む（これをしないと参加登録がサーバーに弾かれる）
+  const { data: { session } } = await sb.auth.getSession();
+  if(!session || !session.user){
+    try{ await initIdentity(); }
+    catch(e){ setStatus('joinStatus','接続の準備中です。数秒後にもう一度お試しください','err'); return; }
+  } else {
+    DEVICE_ID = session.user.id;
+  }
+
   const { data: room } = await sb.from('rooms').select('*').eq('id', ROOM_ID).maybeSingle();
   if(!room){ setStatus('joinStatus','この部屋は見つかりませんでした','err'); return; }
 
