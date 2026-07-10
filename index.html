@@ -1245,37 +1245,60 @@ function toggleAuto(){
   if(AUTO_RUNNING) autoLoop();
 }
 
+/* ===== オート進行の時間設定（ここの数字を変えれば調整できます。単位は秒） ===== */
+const AUTO_TIMING = {
+  drawSec:      95,   // 描画（90秒の持ち時間＋余裕）
+  afterClose:    3,   // 締切→投票開始までの間
+  vote1Sec:     30,   // 予選投票の長さ
+  finalSec:     20,   // 決勝投票の長さ
+  resultSec:    10,   // 結果発表の余韻
+  betweenSec:  600,   // ★次のお題までの待機（＝待機画面を見せる時間）10分＝600秒
+};
+
 async function autoLoop(){
   while(AUTO_RUNNING){
-    const odai = ODAI_POOL[Math.floor(Math.random()*ODAI_POOL.length)];
+    // お題：キューがあれば先頭から、無ければライブラリからランダム
+    let odai;
+    if(ODAI_QUEUE.length){ odai = ODAI_QUEUE[0]; }
+    else { odai = ODAI_POOL[Math.floor(Math.random()*ODAI_POOL.length)]; }
     $('odaiInput').value = odai;
+
     await startDraw();
     if(!AUTO_RUNNING) break;
-    await sleep(100000); // 90秒の持ち時間 + 10秒の余裕
+    await sleep(AUTO_TIMING.drawSec * 1000);
     if(!AUTO_RUNNING) break;
     await closeRound();
     if(!AUTO_RUNNING) break;
 
     const { count: gotSubs } = await sb.from('submissions').select('id',{count:'exact',head:true})
       .eq('room_id', ROOM_ID).eq('round', CURRENT_ROUND).is('deleted_at', null);
-    if(!gotSubs){ await sleep(3000); continue; } // 提出0件なら投票をスキップして次の問題へ
 
-    await sleep(3000);
+    if(gotSubs){
+      // 提出がある時だけ投票→決勝→結果
+      await sleep(AUTO_TIMING.afterClose * 1000);
+      if(!AUTO_RUNNING) break;
+      await startVote();
+      if(!AUTO_RUNNING) break;
+      await sleep(AUTO_TIMING.vote1Sec * 1000);
+      if(!AUTO_RUNNING) break;
+      await startFinal();
+      if(!AUTO_RUNNING) break;
+      await sleep(AUTO_TIMING.finalSec * 1000);
+      if(!AUTO_RUNNING) break;
+      await startResult();
+      if(!AUTO_RUNNING) break;
+      await sleep(AUTO_TIMING.resultSec * 1000);
+    }
     if(!AUTO_RUNNING) break;
-    await startVote();
-    if(!AUTO_RUNNING) break;
-    await sleep(20000); // 予選投票の時間
-    if(!AUTO_RUNNING) break;
-    await startFinal();
-    if(!AUTO_RUNNING) break;
-    await sleep(15000); // 決勝投票の時間
-    if(!AUTO_RUNNING) break;
-    await startResult();
-    if(!AUTO_RUNNING) break;
-    await sleep(8000); // 結果表示の余韻
-    if(!AUTO_RUNNING) break;
+
+    // 待機画面に戻して、次のお題まで長めに待つ（過去作品・ランキング等を見せる時間）
     await returnToLobby();
-    await sleep(5000); // 待機画面（過去作品・ランキング等）を少し見せる
+    // 長い待機は小刻みにチェックして、途中でオフにしたらすぐ止まれるようにする
+    const waitTicks = Math.ceil(AUTO_TIMING.betweenSec / 5);
+    for(let i=0; i<waitTicks; i++){
+      if(!AUTO_RUNNING) break;
+      await sleep(5000);
+    }
   }
 }
 
