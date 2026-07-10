@@ -265,6 +265,7 @@
       <button class="tool-btn" style="width:auto" onclick="playEndCredits()">🎬 エンドロール</button>
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;">
+      <div style="width:100%;font-size:11px;color:var(--sub);margin-bottom:4px;">タップでお題を入力欄にセット（その後「① お題を出す」で開始）</div>
       <div id="queueChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:110px;overflow-y:auto;width:100%;"></div>
     </div>
     <div class="hide" id="queueEditor" style="background:var(--stage-2);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;position:relative;max-height:60vh;overflow-y:auto;">
@@ -1486,7 +1487,7 @@ function renderQueueChips(){
 }
 function fireQueuedOdai(i){
   $('odaiInput').value = ODAI_QUEUE[i];
-  startDraw();
+  $('odaiInput').focus();
 }
 renderQueueChips();
 
@@ -1829,7 +1830,7 @@ async function joinRoom(role){
     }
   }
 
-  const { data: inserted, error } = await sb.from('players').insert({ room_id: ROOM_ID, name, role }).select().single();
+  const { data: inserted, error } = await sb.from('players').insert({ room_id: ROOM_ID, name, role, device_id: DEVICE_ID }).select().single();
   if(error){ setStatus('joinStatus','エラー: '+error.message,'err'); return; }
   PLAYER_ID = inserted.id; PLAYER_NAME = name; PLAYER_ROLE = role; CURRENT_ROUND = room.round || 0;
 
