@@ -166,7 +166,8 @@
     <div class="htop">
       <span class="pill phasepill" id="phaseBadgeDisp">🌙 ロビー</span>
       <span class="pill">部屋 <b id="roomCodeDisp"></b></span>
-      <button class="tool-btn" id="btnEnableSound" style="width:auto;margin-left:auto;" onclick="enableDisplaySound()">🔊 音を有効にする</button>
+      <button class="tool-btn" id="btnEnableSound" style="width:auto;margin-left:auto;" onclick="enableDisplaySound(); enableDisplayBgm();">🔊 音・BGMを有効にする</button>
+      <label id="bgmVolWrap" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--sub);">🎵<input type="range" id="bgmVol" min="0" max="100" value="35" style="width:90px;" oninput="setBgmVolume(this.value)"/></label>
     </div>
     <p id="odaiDisp" style="font-family:'Yusei Magic';font-size:24px;color:var(--gold);text-align:center;margin:16px 0 4px;min-height:34px;"></p>
     <p id="voteCountdownDisp" style="font-family:'Yusei Magic';font-size:18px;color:#ff8a3d;text-align:center;margin:0 0 6px;min-height:22px;"></p>
@@ -821,6 +822,62 @@ async function createRoom(){
   initAvatar();
 }
 
+/* ===================== BGM（配信画面でフェーズに応じて自動切替） ===================== */
+const BGM_TRACKS = {
+  gymnopedie:      'bgm/gymnopedie.mp3',        // 待機・投票
+  gymnopedieGuitar:'bgm/gymnopedie-guitar.mp3', // お絵描き中
+};
+let _bgmAudio = null;
+let _bgmCurrent = null;
+let _bgmEnabled = false;
+
+function bgmSetup(){
+  if(_bgmAudio) return;
+  _bgmAudio = new Audio();
+  _bgmAudio.loop = true;
+  _bgmAudio.volume = 0.35;
+}
+function bgmPlay(trackKey){
+  if(!_bgmEnabled) return;
+  bgmSetup();
+  const src = BGM_TRACKS[trackKey];
+  if(!src) return;
+  if(_bgmCurrent === trackKey && !_bgmAudio.paused) return; // 既に同じ曲が鳴っていれば何もしない
+  _bgmCurrent = trackKey;
+  _bgmAudio.src = src;
+  _bgmAudio.play().catch(e=>console.warn('BGM再生できませんでした:', e));
+}
+function bgmStop(){
+  if(_bgmAudio){ _bgmAudio.pause(); }
+  _bgmCurrent = null;
+}
+/* フェーズに応じて流す曲を決める */
+function bgmForPhase(phase){
+  if(!_bgmEnabled) return;
+  if(phase === 'draw' || phase === 'closed'){
+    bgmPlay('gymnopedieGuitar');           // お絵描き中はギター
+  } else if(phase === 'vote1' || phase === 'final' || phase === 'lobby' || !phase){
+    bgmPlay('gymnopedie');                  // 待機・投票は通常版
+  }
+  // result（結果発表）はBGMを止めて、勝利音を目立たせる
+  else if(phase === 'result'){
+    bgmStop();
+  }
+}
+/* ブラウザの自動再生制限を解除する（Display画面で一度押してもらう） */
+function enableDisplayBgm(){
+  _bgmEnabled = true;
+  bgmSetup();
+  // 無音を一度再生して再生許可を得る
+  _bgmAudio.play().then(()=>{ _bgmAudio.pause(); bgmForPhase(window._dispPhase); })
+    .catch(()=>{ bgmForPhase(window._dispPhase); });
+  const w = $('bgmVolWrap'); if(w) w.style.display = 'flex';
+}
+function setBgmVolume(v){
+  bgmSetup();
+  _bgmAudio.volume = Math.max(0, Math.min(1, v/100));
+}
+
 /* ===================== 配信表示画面（Display）===================== */
 function runDisplayMode(roomId){
   ROOM_ID = roomId;
@@ -843,6 +900,8 @@ function runDisplayMode(roomId){
 }
 
 function renderDisplayPhase(room){
+  window._dispPhase = room.phase;
+  bgmForPhase(room.phase);
   $('phaseBadgeDisp').textContent = PHASE_LABELS[room.phase] || room.phase;
 
   if(room.round !== window._dispLastRound){
