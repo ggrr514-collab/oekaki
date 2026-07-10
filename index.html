@@ -263,6 +263,7 @@
       <button class="tool-btn" style="width:auto" onclick="announceDailyChampions()">🎉 1位表彰</button>
       <button class="tool-btn" style="width:auto" onclick="toggleLibrary()">🗂 ライブラリ</button>
       <button class="tool-btn" style="width:auto" onclick="playEndCredits()">🎬 エンドロール</button>
+      <button class="tool-btn" style="width:auto;border-color:var(--red);color:#ff8a80;" onclick="resetAll()">🗑 全リセット</button>
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;">
       <div style="width:100%;font-size:11px;color:var(--sub);margin-bottom:4px;">タップでお題を入力欄にセット（その後「① お題を出す」で開始）</div>
@@ -302,7 +303,10 @@
     </div>
     <div class="hide" id="historyPanel" style="background:var(--stage-2);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:12px;">
       <div id="historyList" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
-      <div id="historyOdai" style="font-family:'Yusei Magic';font-size:15px;margin-bottom:8px;color:var(--gold);"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div id="historyOdai" style="font-family:'Yusei Magic';font-size:15px;color:var(--gold);flex:1;"></div>
+        <button class="tool-btn" style="width:auto;border-color:var(--red);color:#ff8a80;" onclick="deleteCurrentHistoryRound()">🗑 この回を削除</button>
+      </div>
       <div class="hgrid" id="historyGallery" style="max-height:260px;"></div>
     </div>
     <div class="hgrid" id="gallery"></div>
@@ -1562,6 +1566,21 @@ async function nextPhase(){
   else if(p === 'final'){ await startResult(); }
 }
 
+/* すべての開催記録・作品・投票・問題番号をまっさらに戻す（誤操作防止に2段階確認） */
+async function resetAll(){
+  if(!confirm('【全リセット】これまでの作品・投票・開催記録をすべて消し、第1問に戻します。\n※商品化したい作品がある場合は、先に「作品ライブラリ」で保存しておいてください。\n\n本当に実行しますか？')) return;
+  const phrase = prompt('確認のため「リセット」と入力してください');
+  if(phrase !== 'リセット'){ alert('入力が一致しなかったため、中止しました'); return; }
+
+  const { error } = await sb.rpc('host_reset_room', { p_room_id: ROOM_ID, p_host_key: HOST_KEY });
+  if(error){ alert('エラー: '+error.message); return; }
+
+  CURRENT_ROUND = 0;
+  $('gallery').innerHTML = '';
+  $('subCount').textContent = '0';
+  alert('リセットしました。次のお題から第1問に戻ります。');
+}
+
 async function returnToLobby(){
   const { error } = await hostUpdateRoom({ phase: 'lobby' });
   if(error){ alert('エラー: '+error.message); return; }
@@ -1584,7 +1603,13 @@ async function loadHistoryList(){
   (data||[]).forEach(r=>{ if(!seen.has(r.round)) seen.set(r.round, r.odai); });
 
   const list = $('historyList'); list.innerHTML = '';
-  if(seen.size === 0){ list.textContent = 'まだ提出された作品がありません'; return; }
+  if(seen.size === 0){
+    list.textContent = 'まだ提出された作品がありません';
+    $('historyOdai').textContent = '';
+    $('historyGallery').innerHTML = '';
+    window._historyRound = null;
+    return;
+  }
 
   [...seen.entries()].forEach(([round, odai])=>{
     const b = document.createElement('button');
@@ -1599,6 +1624,8 @@ async function loadHistoryList(){
 }
 
 async function loadHistoryRound(round, odai){
+  window._historyRound = round;
+  window._historyOdai = odai;
   $('historyOdai').textContent = '第'+round+'問「'+odai+'」';
   const { data, error } = await sb.from('submissions')
     .select('name, image_url').eq('room_id', ROOM_ID).eq('round', round).is('deleted_at', null).order('created_at');
@@ -1609,6 +1636,18 @@ async function loadHistoryRound(round, odai){
     el.innerHTML = '<img src="'+sub.image_url+'" alt="'+escapeHtml(sub.name)+'"/><div class="n">'+escapeHtml(sub.name)+'</div>';
     g.appendChild(el);
   });
+}
+
+async function deleteCurrentHistoryRound(){
+  const round = window._historyRound;
+  if(round === undefined || round === null){ alert('削除する回が選ばれていません'); return; }
+  if(!confirm('第'+round+'問「'+(window._historyOdai||'')+'」の作品・投票をすべて削除します。\n※この操作は元に戻せません。\n\n本当に削除しますか？')) return;
+
+  const { error } = await sb.rpc('host_delete_round', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_round: round });
+  if(error){ alert('エラー: '+error.message); return; }
+
+  alert('第'+round+'問を削除しました。');
+  await loadHistoryList(); // 一覧を再読み込み
 }
 
 async function subscribePlayers(){
