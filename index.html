@@ -166,8 +166,10 @@
     <div class="htop">
       <span class="pill phasepill" id="phaseBadgeDisp">🌙 ロビー</span>
       <span class="pill">部屋 <b id="roomCodeDisp"></b></span>
+      <button class="tool-btn" id="btnEnableSound" style="width:auto;margin-left:auto;" onclick="enableDisplaySound()">🔊 音を有効にする</button>
     </div>
     <p id="odaiDisp" style="font-family:'Yusei Magic';font-size:24px;color:var(--gold);text-align:center;margin:16px 0 4px;min-height:34px;"></p>
+    <p id="voteCountdownDisp" style="font-family:'Yusei Magic';font-size:18px;color:#ff8a3d;text-align:center;margin:0 0 6px;min-height:22px;"></p>
     <div class="timer hide" id="timerRowDisp" style="margin:0 0 10px;"><div class="bar" id="timebarDisp"></div></div>
 
     <div class="hgrid" id="galleryDisp" style="flex:1;overflow-y:auto;"></div>
@@ -242,6 +244,7 @@
       <input id="odaiInput" placeholder="お題を入力（例：あなただけの最強を描け）" />
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;">
+      <button class="btn" id="btnNext" style="width:auto;background:var(--mascot-blue);color:#fff;" onclick="nextPhase()">▶ 次へ</button>
       <button class="btn" id="btnStartDraw" style="width:auto" onclick="startDraw()">① お題を出す</button>
       <button class="btn" id="btnClose" style="width:auto" onclick="closeRound()">② しめきる</button>
       <button class="btn" id="btnVote" style="width:auto" onclick="startVote()">③ 投票を始める</button>
@@ -408,6 +411,7 @@
   <!-- ===== プレイヤー：予選投票 ===== -->
   <div class="hide" id="voteScreen" style="flex:1;display:flex;flex-direction:column;padding:14px;">
     <p id="voteOdai" style="text-align:center;font-family:'Yusei Magic';font-size:16px;color:var(--gold);margin:0 0 4px;"></p>
+    <p id="voteCountdown" style="text-align:center;font-family:'Yusei Magic';font-size:14px;color:#ff8a3d;margin:0 0 4px;min-height:18px;"></p>
     <p class="sub" style="text-align:center;margin-bottom:10px;">絵をタップで拡大 ─ 面白い絵に花丸を！</p>
     <div class="hgrid" id="voteGallery" style="flex:1;overflow-y:auto;"></div>
   </div>
@@ -458,16 +462,21 @@ let PLAYER_ROLE = null;
 let CURRENT_ROUND = 0;
 let CURRENT_ODAI = '';
 
-/* このブラウザだけの合言葉。名前を変えても、同じブラウザなら同じ値になる */
-function getDeviceId(){
-  let id = localStorage.getItem('oekaki_device_id');
-  if(!id){
-    id = 'dev_' + crypto.randomUUID();
-    localStorage.setItem('oekaki_device_id', id);
+/* 身分証は自己申告のIDではなく、Supabaseサーバーが発行する偽造不可能なID(匿名認証)を使う。
+   変数名は今まで通り DEVICE_ID のまま(中身が本物のIDに変わった) */
+let DEVICE_ID = null;
+async function initIdentity(){
+  let { data: { session } } = await sb.auth.getSession();
+  if(!session){
+    const { data, error } = await sb.auth.signInAnonymously();
+    if(error){
+      alert('接続の初期化に失敗しました: '+error.message+'\n(Supabaseの Authentication 設定で「Allow anonymous sign-ins」がONか確認してください)');
+      throw error;
+    }
+    session = data.session;
   }
-  return id;
+  DEVICE_ID = session.user.id;
 }
-const DEVICE_ID = getDeviceId();
 
 function openDisplayWindow(){
   const url = location.origin + location.pathname + '?room=' + encodeURIComponent(ROOM_ID) + '&view=display';
@@ -496,6 +505,13 @@ function sfxTick(){ playBeep(660, 0.06, 'square', 0.08); }
 function sfxWin(){
   [523,659,784,1047].forEach((f,i)=>setTimeout(()=>playBeep(f,0.25,'triangle',0.18), i*110));
 }
+/* Display画面用：ブラウザの自動再生制限を解除する(一度押せばOK) */
+function enableDisplaySound(){
+  const ctx = getAudioCtx();
+  if(ctx && ctx.state === 'suspended') ctx.resume();
+  playBeep(880, 0.1, 'sine'); // 確認音
+  const b = $('btnEnableSound'); if(b) b.style.display = 'none';
+}
 
 /* ===================== プレイヤー：ランキング ===================== */
 function openPlayerRanking(){
@@ -521,7 +537,7 @@ async function fetchRankingRows(type){
   let rows = [];
   if(type === 'points'){
     const { data, error } = await sb.from('device_stats')
-      .select('device_id, last_name, total_hanamaru').order('total_hanamaru', { ascending:false }).limit(20);
+      .select('device_id, last_name, total_hanamaru').order('total_hanamaru', { ascending:false }).limit(100);
     if(error) throw error;
     const base = (data||[]);
     const nameOf = await resolveDeviceNames(base.map(r=>r.device_id));
@@ -533,7 +549,7 @@ async function fetchRankingRows(type){
     const counts = {}, nameOf = {};
     (data||[]).forEach(s=>{ counts[s.device_id]=(counts[s.device_id]||0)+1; nameOf[s.device_id]=s.name; });
     rows = Object.entries(counts).map(([id,c])=>({ device_id:id, name:nameOf[id]||'名無し', value:c, suffix:'回参加' }))
-      .sort((a,b)=>b.value-a.value).slice(0,20);
+      .sort((a,b)=>b.value-a.value).slice(0,100);
   } else if(type === 'wins'){
     const { data, error } = await sb.from('point_ledger').select('device_id')
       .eq('room_id', ROOM_ID).eq('points', 5);
@@ -543,7 +559,7 @@ async function fetchRankingRows(type){
     const ids = Object.keys(counts);
     const nameOf = await resolveDeviceNames(ids);
     rows = ids.map(id=>({ device_id:id, name:nameOf[id]||'名無し', value:counts[id], suffix:'回優勝' }))
-      .sort((a,b)=>b.value-a.value).slice(0,20);
+      .sort((a,b)=>b.value-a.value).slice(0,100);
   }
   return rows;
 }
@@ -733,32 +749,51 @@ async function startStream(){
   if(room && room.current_stream_id){
     // 配信中 → 終了する
     if(!confirm('配信を終了しますか？（連続参加のカウントが確定します）')) return;
-    const { error } = await sb.from('rooms').update({ current_stream_id: null }).eq('id', ROOM_ID);
+    const { error } = await hostUpdateRoom({ current_stream_id: '' });
     if(error){ alert('エラー: '+error.message); return; }
+    // 参加者リストをクリア（次の配信の人数を0から数え直すため）
+    await sb.rpc('host_clear_players', { p_room_id: ROOM_ID, p_host_key: HOST_KEY });
+    if(window._headcountRefresh) window._headcountRefresh();
     $('btnStartStream').textContent = '📡 配信を開始';
     return;
   }
 
   // 配信していない → 開始する
   const label = new Date().toLocaleDateString('ja-JP', { month:'numeric', day:'numeric' }) + '配信';
-  const { data: stream, error } = await sb.from('streams').insert({ label }).select().single();
+  const { error } = await sb.rpc('host_start_stream', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_label: label });
   if(error){ alert('エラー: '+error.message); return; }
-  const { error: err2 } = await sb.from('rooms').update({ current_stream_id: stream.id }).eq('id', ROOM_ID);
-  if(err2){ alert('エラー: '+err2.message); return; }
   $('btnStartStream').textContent = '📡 配信を終了：'+label;
 }
 
 function runHostSetup(){ $('hostCreate').classList.remove('hide'); }
 
+let HOST_KEY = null;
+/* 進行の書き換えは、ホスト鍵つきのRPC経由でのみ実行できる */
+async function hostUpdateRoom(patch){
+  const { error } = await sb.rpc('host_update_room', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_patch: patch });
+  return { error };
+}
 async function createRoom(){
   const roomId = $('roomIdInput').value.trim();
   if(!roomId){ setStatus('createStatus','部屋コードを入れてください','err'); return; }
   setStatus('createStatus','作成中…','');
 
-  const { data: existing } = await sb.from('rooms').select('*').eq('id', roomId).maybeSingle();
+  const { data: existing } = await sb.from('rooms').select('id').eq('id', roomId).maybeSingle();
+  const storedKey = localStorage.getItem('oekaki_hostkey_' + roomId);
+
   if(!existing){
-    const { error } = await sb.from('rooms').insert({ id: roomId, phase: 'lobby', round: 0 });
+    // 新規作成：ホスト鍵を発行し、部屋と一緒に金庫(外から読めないテーブル)へ保存
+    HOST_KEY = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)+Date.now());
+    const { error } = await sb.rpc('create_room', { p_room_id: roomId, p_host_key: HOST_KEY });
     if(error){ setStatus('createStatus','エラー: '+error.message,'err'); return; }
+    localStorage.setItem('oekaki_hostkey_' + roomId, HOST_KEY);
+  } else if(storedKey){
+    // 既存の部屋＋このブラウザに鍵がある：ホストとして開く
+    HOST_KEY = storedKey;
+  } else {
+    // 既存の部屋だが、このブラウザはホストではない
+    setStatus('createStatus','この部屋はすでに存在し、このブラウザにはホスト権限がありません。部屋を作成したブラウザで開くか、別の部屋コードを使ってください','err');
+    return;
   }
   ROOM_ID = roomId;
   $('hostCreate').classList.add('hide');
@@ -770,6 +805,7 @@ async function createRoom(){
   window._joinLink = link;
 
   subscribePlayers();
+  startHeadcountWatch();
   subscribeRoom(hostOnRoomChange);
   subscribeSubmissions();
 
@@ -834,6 +870,7 @@ function renderDisplayPhase(room){
     $('galleryDisp').classList.remove('hide');
     $('timerRowDisp').classList.add('hide');
     $('odaiDisp').textContent = 'お題「'+room.odai+'」';
+    startVoteCountdown(room.vote_deadline, $('voteCountdownDisp'));
     const stage = room.phase === 'final' ? 2 : 1;
     const key = room.round+'-'+stage;
     if(window._dispVoteSub !== key){
@@ -841,6 +878,7 @@ function renderDisplayPhase(room){
       loadDisplayVoteCounts(room.round, stage, room.finalists||null);
     }
   } else if(room.phase === 'result'){
+    $('voteCountdownDisp').textContent = '';
     stopLobbyIdle();
     $('galleryDisp').classList.add('hide');
     $('timerRowDisp').classList.add('hide');
@@ -865,8 +903,7 @@ function addThumbDisp(sub){
   if(document.querySelector('#galleryDisp .thumb[data-sub="'+sub.id+'"]')) return;
   const g = $('galleryDisp');
   const el = document.createElement('div'); el.className='thumb'; el.dataset.sub=sub.id;
-  el.innerHTML = '<span class="votecount" data-role="count">0</span>'+
-    '<img src="'+sub.image_url+'" alt="'+escapeHtml(sub.name)+'"/><div class="n">'+escapeHtml(sub.name)+'</div>';
+  el.innerHTML = '<img src="'+sub.image_url+'" alt="'+escapeHtml(sub.name)+'"/><div class="n">'+escapeHtml(sub.name)+'</div>';
   window._subData = window._subData || {};
   window._subData[sub.id] = sub;
   el.querySelector('img').addEventListener('click', ()=>openModal(sub.id));
@@ -894,25 +931,19 @@ async function loadDisplayVoteCounts(round, stage, finalistIds){
   $('galleryDisp').innerHTML = '';
   (subs||[]).forEach(sub=>addThumbDisp(sub));
 
-  const { data: votes } = await sb.from('votes').select('submission_id').eq('room_id', ROOM_ID).eq('round', round).eq('stage', stage);
-  const counts = {};
-  (votes||[]).forEach(v=>{ counts[v.submission_id]=(counts[v.submission_id]||0)+1; });
-  Object.entries(counts).forEach(([id,n])=>{
-    const badge = document.querySelector('#galleryDisp .thumb[data-sub="'+id+'"] [data-role="count"]');
-    if(badge) badge.textContent = n;
-  });
-
-  subscribeVotesLive(round, stage, (vote)=>{
-    const badge = document.querySelector('#galleryDisp .thumb[data-sub="'+vote.submission_id+'"] [data-role="count"]');
-    if(badge) badge.textContent = (parseInt(badge.textContent||'0',10)+1);
-  });
+  // 公平のため、投票中は誰に何票入っているかを一切表示しない。
+  // 票が入ったこと自体は「ポン」という音だけで伝える(結果は発表まで秘密)
+  subscribeVotesLive(round, stage, ()=>{ sfxVote(); });
 }
 
 async function showDisplayResult(winnerSubId){
   if(!winnerSubId){ $('resultNameDisp').textContent='今回は該当作品なし'; $('resultImgDisp').src=''; return; }
   const { data: sub } = await sb.from('submissions').select('name, image_url').eq('id', winnerSubId).maybeSingle();
+  // 結果発表で初めて、優勝作品の獲得票数を明かす
+  const { count: winVotes } = await sb.from('votes').select('id', { count:'exact', head:true })
+    .eq('submission_id', winnerSubId).eq('stage', 2);
   $('resultImgDisp').src = sub ? sub.image_url : '';
-  $('resultNameDisp').textContent = sub ? sub.name+' の一枚！' : '';
+  $('resultNameDisp').textContent = sub ? (sub.name+' の一枚！'+(winVotes ? '（花丸 '+winVotes+' 個）' : '')) : '';
   const cv = $('hanamaruCanvasDisp'); const ctx = cv.getContext('2d'); ctx.clearRect(0,0,300,300);
   sfxWin(); fireConfetti();
   setTimeout(()=>drawHanamaru(ctx,242,58,0.8), 300);
@@ -1257,6 +1288,7 @@ const PHASE_LABELS = {
   result: '🎉 結果発表',
 };
 function hostOnRoomChange(room){
+  window._hostPhase = room.phase;
   const badge = $('phaseBadge');
   if(badge) badge.textContent = PHASE_LABELS[room.phase] || room.phase;
   updateHostButtons(room.phase);
@@ -1270,9 +1302,10 @@ function hostOnRoomChange(room){
 function updateHostButtons(phase){
   const set = (id, enabled)=>{ const b=$(id); if(b) b.disabled = !enabled; };
   if(AUTO_RUNNING){
-    ['btnStartDraw','btnClose','btnVote','btnFinal','btnResult','btnBackToLobby'].forEach(id=>set(id,false));
+    ['btnNext','btnStartDraw','btnClose','btnVote','btnFinal','btnResult','btnBackToLobby'].forEach(id=>set(id,false));
     return;
   }
+  set('btnNext', true);
   set('btnStartDraw', true); // 新しい問題はいつでも出せる（今の進行をリセットして次に進む）
   set('btnClose',  phase==='draw');
   set('btnVote',   phase==='closed');
@@ -1298,19 +1331,26 @@ async function startDraw(){
   $('gallery').innerHTML = '';
   $('subCount').textContent = '0';
 
-  const { error } = await sb.from('rooms').update({
-    phase: 'draw', odai, round: nextRound, started_at: new Date().toISOString(), duration_sec: 90
-  }).eq('id', ROOM_ID);
-  if(error) alert('エラー: '+error.message);
+  const { error } = await hostUpdateRoom({
+    phase: 'draw', odai, round: nextRound, started_at: new Date().toISOString(), duration_sec: 90, vote_deadline: ''
+  });
+  if(error){ alert('エラー: '+error.message); return; }
+  // 使ったお題はキューから取り除き、入力欄も次に備えて空にする
+  if(ODAI_QUEUE[0] === odai){
+    ODAI_QUEUE.shift();
+    localStorage.setItem('oekaki_odai_queue', JSON.stringify(ODAI_QUEUE));
+    renderQueueChips();
+  }
+  $('odaiInput').value = '';
 }
 
 async function closeRound(){
-  const { error } = await sb.from('rooms').update({ phase: 'closed' }).eq('id', ROOM_ID);
+  const { error } = await hostUpdateRoom({ phase: 'closed' });
   if(error) alert('エラー: '+error.message);
 }
 
 async function startVote(){
-  const { error } = await sb.from('rooms').update({ phase: 'vote1' }).eq('id', ROOM_ID);
+  const { error } = await hostUpdateRoom({ phase: 'vote1', vote_deadline: new Date(Date.now()+30000).toISOString() });
   if(error){ alert('エラー: '+error.message); return; }
   await hostLoadVoteCounts(CURRENT_ROUND);
   subscribeVotesLive(CURRENT_ROUND, 1, (vote)=>{
@@ -1377,7 +1417,7 @@ async function startFinal(){
   const k = Math.max(2, Math.min(5, Math.round(ids.length*0.4)));
   const finalists = ranked.slice(0, Math.min(k, ids.length));
 
-  const { error } = await sb.from('rooms').update({ phase:'final', finalists }).eq('id', ROOM_ID);
+  const { error } = await hostUpdateRoom({ phase:'final', finalists, vote_deadline: new Date(Date.now()+20000).toISOString() });
   if(error){ alert('エラー: '+error.message); return; }
 
   await hostLoadVoteCounts(CURRENT_ROUND); // バッジ最終更新
@@ -1400,7 +1440,7 @@ async function startResult(){
   // 順位に応じたポイントをまとめて配布（1問=1回だけ、DB側で二重防止済み）
   await sb.rpc('award_final_points', { p_room_id: ROOM_ID, p_round: CURRENT_ROUND });
 
-  const { error } = await sb.from('rooms').update({ phase:'result', winner_submission_id: winner }).eq('id', ROOM_ID);
+  const { error } = await hostUpdateRoom({ phase:'result', winner_submission_id: winner, vote_deadline: '' });
   if(error){ alert('エラー: '+error.message); return; }
 
   document.querySelectorAll('.thumb.winner').forEach(el=>el.classList.remove('winner'));
@@ -1417,8 +1457,29 @@ async function startResult(){
   }
 }
 
+/* 「▶次へ」1ボタンで、今のフェーズから次のフェーズへ進む(半オート進行) */
+async function nextPhase(){
+  const p = window._hostPhase || 'lobby';
+  if(p === 'lobby' || p === 'result'){
+    if(p === 'result'){ await returnToLobby(); }
+    // お題が空なら、キュー→ライブラリの順で自動補充
+    if(!$('odaiInput').value.trim()){
+      if(ODAI_QUEUE.length){
+        $('odaiInput').value = ODAI_QUEUE[0];
+      } else {
+        $('odaiInput').value = ODAI_POOL[Math.floor(Math.random()*ODAI_POOL.length)];
+      }
+    }
+    await startDraw();
+  }
+  else if(p === 'draw'){ await closeRound(); }
+  else if(p === 'closed'){ await startVote(); }
+  else if(p === 'vote1'){ await startFinal(); }
+  else if(p === 'final'){ await startResult(); }
+}
+
 async function returnToLobby(){
-  const { error } = await sb.from('rooms').update({ phase: 'lobby' }).eq('id', ROOM_ID);
+  const { error } = await hostUpdateRoom({ phase: 'lobby' });
   if(error){ alert('エラー: '+error.message); return; }
 }
 
@@ -1480,26 +1541,34 @@ async function subscribePlayers(){
     .subscribe();
 }
 
-/* 待機画面(参加者・配信)向けの人数表示。ホスト画面とは別に、軽量に購読する */
+/* 待機画面(参加者・配信)向けの人数表示。
+   Presence(今実際に接続している人)ベースなので、タブを閉じた人は自動で数から消える */
 function startHeadcountWatch(){
   if(window._headcountWatching) return;
   window._headcountWatching = true;
-  const refresh = async ()=>{
-    const { data, error } = await sb.from('players').select('role').eq('room_id', ROOM_ID);
-    if(error){ console.warn('[人数] 取得エラー:', error); return; }
-    const rows = data||[];
-    console.log('[人数] players取得:', rows.length, '件', rows);
-    const drawers = rows.filter(r=>r.role==='drawer').length;
-    const voters = rows.filter(r=>r.role==='voter').length;
+  const render = (state)=>{
+    let drawers = 0, voters = 0;
+    Object.values(state).forEach(metas=>{
+      const role = metas[0] && metas[0].role;
+      if(role === 'drawer') drawers++;
+      else if(role === 'voter') voters++;
+    });
     const text = '🎨 描き手 '+drawers+' 人　👀 見てる人 '+voters+' 人';
     const a = $('lobbyHeadcount'); if(a) a.textContent = text;
     const b = $('lobbyHeadcountDisp'); if(b) b.textContent = text;
+    const dc = $('drawerCount'); if(dc) dc.textContent = drawers;
+    const vc = $('voterCount'); if(vc) vc.textContent = voters;
   };
-  window._headcountRefresh = refresh;
-  refresh();
-  sb.channel('headcount-'+ROOM_ID)
-    .on('postgres_changes', { event:'*', schema:'public', table:'players', filter:'room_id=eq.'+ROOM_ID }, refresh)
-    .subscribe();
+  const ch = sb.channel('presence-'+ROOM_ID, { config: { presence: { key: DEVICE_ID } } });
+  window._presenceChannel = ch;
+  ch.on('presence', { event:'sync' }, ()=>render(ch.presenceState()));
+  ch.subscribe((status)=>{
+    // 参加者本人だけが自分の存在を登録する（ホスト・配信画面は数える側）
+    if(status === 'SUBSCRIBED' && typeof PLAYER_ROLE !== 'undefined' && PLAYER_ROLE){
+      ch.track({ role: PLAYER_ROLE });
+    }
+  });
+  window._headcountRefresh = ()=>render(ch.presenceState());
 }
 
 function checkCloseHint(){
@@ -1508,6 +1577,26 @@ function checkCloseHint(){
   const drawers = parseInt($('drawerCount').textContent||'0',10);
   const subs = parseInt($('subCount').textContent||'0',10);
   hint.classList.toggle('hide', !(drawers>0 && subs>=drawers));
+}
+
+/* 投票の残り時間を1秒ごとに表示する(締切での自動処理はせず、表示のみ) */
+function startVoteCountdown(deadlineIso, el){
+  clearInterval(window._voteCountdownT);
+  if(!el) return;
+  if(!deadlineIso){ el.textContent = ''; return; }
+  const deadline = new Date(deadlineIso).getTime();
+  const tick = ()=>{
+    const remain = Math.ceil((deadline - Date.now())/1000);
+    if(remain > 0){
+      el.textContent = '⏳ 投票締切まで あと'+remain+'秒';
+      if(remain <= 5) sfxTick();
+    } else {
+      el.textContent = 'まもなく締め切られます…';
+      clearInterval(window._voteCountdownT);
+    }
+  };
+  tick();
+  window._voteCountdownT = setInterval(tick, 1000);
 }
 
 function subscribeVotesLive(round, stage, onInsert){
@@ -1554,7 +1643,7 @@ function addThumb(sub){
 
 async function deleteSubmission(id){
   if(!confirm('この作品を削除しますか？（後で「削除した作品を見る」から戻せます）')) return;
-  const { error } = await sb.from('submissions').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await sb.rpc('host_set_submission_deleted', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_submission_id: id, p_deleted: true });
   if(error){ alert('削除エラー: '+error.message); return; }
   const el = document.querySelector('#gallery .thumb[data-sub="'+id+'"]');
   if(el) el.remove();
@@ -1566,7 +1655,7 @@ async function banDeviceForSubmission(id){
   const { data: sub } = await sb.from('submissions').select('device_id, name').eq('id', id).maybeSingle();
   if(!sub){ alert('作品が見つかりません'); return; }
   if(!confirm(sub.name+' さんを、今後「描いて参加」できないようにしますか？\n（そのブラウザ限定です。別のブラウザ・端末からは回避できてしまいます）')) return;
-  const { error } = await sb.from('banned_devices').insert({ device_id: sub.device_id, reason:'不適切な作品のため' });
+  const { error } = await sb.rpc('host_ban_device', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_device_id: sub.device_id, p_reason:'不適切な作品のため' });
   if(error && error.code !== '23505'){ alert('エラー: '+error.message); return; }
   alert(sub.name+' さんのブラウザを、今後「描いて参加」できないようにしました');
 }
@@ -1594,7 +1683,7 @@ async function loadTrash(){
   });
 }
 async function restoreSubmission(id){
-  const { error } = await sb.from('submissions').update({ deleted_at: null }).eq('id', id);
+  const { error } = await sb.rpc('host_set_submission_deleted', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_submission_id: id, p_deleted: false });
   if(error){
     if(error.code === '23505'){ alert('この人は、この問題にすでに別の作品を提出しているため戻せません'); return; }
     alert('エラー: '+error.message); return;
@@ -1979,8 +2068,9 @@ async function enterVote(round, stage, filterIds){
     ? '決勝！ 絵をタップで拡大 ─ 優勝に花丸を！'
     : '絵をタップで拡大 ─ 面白い絵に花丸を！';
 
-  const { data: roomRow } = await sb.from('rooms').select('odai').eq('id', ROOM_ID).maybeSingle();
+  const { data: roomRow } = await sb.from('rooms').select('odai, vote_deadline').eq('id', ROOM_ID).maybeSingle();
   $('voteOdai').textContent = (roomRow && roomRow.odai) ? 'お題「'+roomRow.odai+'」' : '';
+  startVoteCountdown(roomRow && roomRow.vote_deadline, $('voteCountdown'));
 
   let query = sb.from('submissions').select('id, name, image_url, strokes').eq('room_id', ROOM_ID).eq('round', round).is('deleted_at', null);
   if(filterIds && filterIds.length) query = query.in('id', filterIds);
@@ -1991,11 +2081,6 @@ async function enterVote(round, stage, filterIds){
     .eq('room_id', ROOM_ID).eq('round', round).eq('stage', stage).eq('device_id', DEVICE_ID);
   const votedSet = new Set((myVotes||[]).map(v=>v.submission_id));
 
-  const { data: allVotes } = await sb.from('votes').select('submission_id')
-    .eq('room_id', ROOM_ID).eq('round', round).eq('stage', stage);
-  const counts = {};
-  (allVotes||[]).forEach(v=>{ counts[v.submission_id]=(counts[v.submission_id]||0)+1; });
-
   const g = $('voteGallery'); g.innerHTML='';
   window._subData = window._subData || {};
   (subs||[]).forEach(sub=>{
@@ -2003,7 +2088,6 @@ async function enterVote(round, stage, filterIds){
     const el=document.createElement('div'); el.className='thumb'; el.dataset.sub=sub.id;
     const already = votedSet.has(sub.id);
     el.innerHTML =
-      '<span class="votecount" data-role="count">'+(counts[sub.id]||0)+'</span>'+
       '<img src="'+sub.image_url+'" alt="'+escapeHtml(sub.name)+'"/>'+
       '<div class="n">'+escapeHtml(sub.name)+'</div>'+
       '<button class="voteBtn'+(already?' done':'')+'" data-role="btn">'+(already?'✓ 花丸ずみ':'花丸！')+'</button>';
@@ -2012,13 +2096,6 @@ async function enterVote(round, stage, filterIds){
     g.appendChild(el);
   });
 
-  subscribeVotesLive(round, stage, (vote)=>{
-    const badge = document.querySelector('#voteGallery .thumb[data-sub="'+vote.submission_id+'"] [data-role="count"]');
-    if(badge) badge.textContent = (parseInt(badge.textContent||'0',10)+1);
-    if(window._modalSubId === vote.submission_id){
-      $('modalCount').textContent = badge ? badge.textContent : $('modalCount').textContent;
-    }
-  });
 
   sb.channel('subdel-'+ROOM_ID+'-'+round+'-'+stage)
     .on('postgres_changes', { event:'UPDATE', schema:'public', table:'submissions', filter:'room_id=eq.'+ROOM_ID },
@@ -2043,7 +2120,7 @@ async function castVote(submissionId, el){
   btn.classList.add('done'); btn.textContent='✓ 花丸ずみ';
   const badge = el.querySelector('[data-role="count"]');
   if(!error){
-    badge.textContent = (parseInt(badge.textContent||'0',10)+1);
+    if(badge) badge.textContent = (parseInt(badge.textContent||'0',10)+1);
     syncOtherView(submissionId);
     el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
     sfxVote();
@@ -2059,7 +2136,6 @@ function syncOtherView(submissionId){
   }
   if(window._modalSubId === submissionId){
     $('modalVoteBtn').classList.add('done'); $('modalVoteBtn').textContent='✓ 花丸ずみ';
-    $('modalCount').textContent = galEl ? galEl.querySelector('[data-role="count"]').textContent : $('modalCount').textContent;
   }
 }
 
@@ -2083,9 +2159,15 @@ function openModal(submissionId){
   const hostGalEl = document.querySelector('#gallery .thumb[data-sub="'+submissionId+'"]')
     || document.querySelector('#galleryDisp .thumb[data-sub="'+submissionId+'"]');
   const galEl = voteGalEl || hostGalEl;
-  const count = galEl ? galEl.querySelector('[data-role="count"]').textContent : '0';
+  const countBadge = galEl ? galEl.querySelector('[data-role="count"]') : null;
   const alreadyDone = voteGalEl ? voteGalEl.querySelector('[data-role="btn"]').classList.contains('done') : false;
-  $('modalCount').textContent = count;
+  // 投票中は票数を隠す(公平のため)。バッジがある画面(ホスト等)でだけ表示
+  if(countBadge){
+    $('modalCount').style.display = '';
+    $('modalCount').textContent = countBadge.textContent;
+  } else {
+    $('modalCount').style.display = 'none';
+  }
 
   const mBtn = $('modalVoteBtn');
   if(!voteGalEl){
@@ -2248,10 +2330,13 @@ async function showResult(winnerSubId){
   setTimeout(()=>drawHanamaru(ctx,242,58,0.8), 300);
 }
 
-/* ===================== 起動（すべての定義が終わった最後に実行） ===================== */
-if(roomParam && DISPLAY_MODE){ runDisplayMode(roomParam); }
-else if(roomParam){ runPlayerMode(roomParam); }
-else { runHostSetup(); }
+/* ===================== 起動（本人ID取得→画面へ） ===================== */
+(async ()=>{
+  await initIdentity();
+  if(roomParam && DISPLAY_MODE){ runDisplayMode(roomParam); }
+  else if(roomParam){ runPlayerMode(roomParam); }
+  else { runHostSetup(); }
+})();
 </script>
 </body>
 </html>
