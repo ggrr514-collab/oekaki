@@ -911,6 +911,11 @@ function runDisplayMode(roomId){
 function renderDisplayPhase(room){
   window._dispPhase = room.phase;
   bgmForPhase(room.phase);
+  // 投票フェーズ以外では締切カウントダウンを必ず消す（待機画面に残らないように）
+  if(room.phase !== 'vote1' && room.phase !== 'final'){
+    clearInterval(window._voteCountdownT);
+    const cd = $('voteCountdownDisp'); if(cd) cd.textContent = '';
+  }
   $('phaseBadgeDisp').textContent = PHASE_LABELS[room.phase] || room.phase;
 
   if(room.round !== window._dispLastRound){
@@ -1715,6 +1720,11 @@ function checkCloseHint(){
 }
 
 /* 投票の残り時間を1秒ごとに表示する(締切での自動処理はせず、表示のみ) */
+function stopVoteCountdown(){
+  clearInterval(window._voteCountdownT);
+  const a = $('voteCountdown'); if(a) a.textContent = '';
+  const b = $('voteCountdownDisp'); if(b) b.textContent = '';
+}
 function startVoteCountdown(deadlineIso, el){
   clearInterval(window._voteCountdownT);
   if(!el) return;
@@ -1967,6 +1977,7 @@ async function joinRoom(role){
 }
 
 function setLobby(bigText, msgText){
+  stopVoteCountdown();
   $('lobbyBig').innerHTML = bigText + '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   $('lobbyMsg').textContent = msgText || '';
   $('playerLobby').classList.remove('hide');
@@ -2013,6 +2024,7 @@ function playerOnRoomChange(room){
 
 function enterDraw(odai, startedAt, durationSec){
   CURRENT_ODAI = odai;
+  stopVoteCountdown();
   stopPlayerLobbyIdle();
   $('playerLobby').classList.add('hide');
   $('submittedScreen').classList.add('hide');
@@ -2452,6 +2464,7 @@ function drawHanamaru(ctx,cx,cy,scale){
 }
 
 async function showResult(winnerSubId){
+  stopVoteCountdown();
   stopPlayerLobbyIdle();
   ['playerLobby','drawScreen','submittedScreen','voteScreen'].forEach(id=>{ if($(id)) $(id).classList.add('hide'); });
   if(!winnerSubId){
