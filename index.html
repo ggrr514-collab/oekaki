@@ -362,6 +362,7 @@
       <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerGallery()">🖼 作品一覧</button>
       <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerRanking()">🏆 ランキング</button>
     </div>
+    <button class="btn" style="width:100%;margin-top:8px;padding:12px;" onclick="startPractice()">✏️ 練習で描いてみる</button>
   </div>
 
   <!-- ===== プレイヤー：ランキング ===== -->
@@ -405,7 +406,8 @@
       <button class="tool-btn" onclick="undo()">戻す</button>
       <button class="tool-btn" onclick="resetStrokes()">消す</button>
       <span class="spacer"></span>
-      <button class="submitbtn" onclick="submitArt()">提出</button>
+      <span id="realTools"><button class="submitbtn" onclick="submitArt()">提出</button></span>
+      <span id="practiceTools" class="hide"><button class="submitbtn" style="background:var(--sub);" onclick="stopPractice()">やめる</button></span>
     </div>
   </div>
 
@@ -1993,8 +1995,8 @@ function playerOnRoomChange(room){
     window._lastDrawRound = room.round;
     setLobby('ただいま参加者がお絵描き中です', '視聴中（もうすぐ投票が始まります）');
   } else if(room.phase === 'closed' && PLAYER_ROLE === 'drawer'){
-    if(!$('drawScreen').classList.contains('hide')){
-      // 描いている最中に締め切られた → その場の絵を自動提出
+    if(!$('drawScreen').classList.contains('hide') && !window._practiceMode){
+      // 描いている最中に締め切られた → その場の絵を自動提出（練習中は除く）
       submitArt();
     } else if(!$('submittedScreen') || $('submittedScreen').classList.contains('hide')){
       setLobby('お題が出るのを待っています', 'この問題は締め切られました。次のお題をお待ちください');
@@ -2023,6 +2025,7 @@ function playerOnRoomChange(room){
 }
 
 function enterDraw(odai, startedAt, durationSec){
+  window._practiceMode = false;
   CURRENT_ODAI = odai;
   stopVoteCountdown();
   stopPlayerLobbyIdle();
@@ -2030,6 +2033,9 @@ function enterDraw(odai, startedAt, durationSec){
   $('submittedScreen').classList.add('hide');
   $('drawScreen').classList.remove('hide');
   $('drawOdai').textContent = odai;
+  $('timebar').parentElement.style.display = '';   // タイマー表示を戻す
+  $('practiceTools').classList.add('hide');
+  $('realTools').classList.remove('hide');
 
   buildSwatches();
   padCtx = sizeCanvas($('pad')); strokes=[]; redraw(); bindPad();
@@ -2037,6 +2043,31 @@ function enterDraw(odai, startedAt, durationSec){
   const elapsed = (Date.now() - new Date(startedAt).getTime())/1000;
   const remain = Math.max(1, Math.round(durationSec - elapsed));
   startTimer(remain);
+}
+
+/* 練習モード：お題が無くても自由に描ける。提出も保存もされない */
+function startPractice(){
+  window._practiceMode = true;
+  stopVoteCountdown();
+  stopPlayerLobbyIdle();
+  $('playerLobby').classList.add('hide');
+  $('submittedScreen').classList.add('hide');
+  $('drawScreen').classList.remove('hide');
+  $('drawOdai').textContent = '✏️ 練習中（自由に描いてみよう）';
+  $('timebar').parentElement.style.display = 'none';  // タイマーを隠す
+  clearInterval(timer);
+  $('practiceTools').classList.remove('hide');
+  $('realTools').classList.add('hide');
+
+  buildSwatches();
+  padCtx = sizeCanvas($('pad')); strokes=[]; redraw(); bindPad();
+}
+function stopPractice(){
+  window._practiceMode = false;
+  $('drawScreen').classList.add('hide');
+  strokes=[]; 
+  // 待機画面に戻す
+  setLobby('お題が出るのを待っています', PLAYER_ROLE==='drawer' ? (PLAYER_NAME+' さんとして待機中') : '視聴中');
 }
 
 /* ===================== 部屋のリアルタイム購読(共通) ===================== */
