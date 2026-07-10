@@ -601,6 +601,7 @@ function closePlayerRanking(){ $('playerRankingOverlay').classList.add('hide'); 
 /* ===================== プレイヤー：過去作品を見る(待機中の暇つぶし) ===================== */
 async function openPlayerGallery(){
   $('playerGalleryOverlay').classList.remove('hide');
+  await buildRoundDisplayMap();
   const { data, error } = await sb.from('submissions')
     .select('round, odai').eq('room_id', ROOM_ID).is('deleted_at', null).order('round');
   const list = $('pgRoundList'); list.innerHTML='';
@@ -611,7 +612,7 @@ async function openPlayerGallery(){
   [...seen.entries()].forEach(([round, odai])=>{
     const b = document.createElement('button');
     b.className='tool-btn'; b.style.width='auto';
-    b.textContent = '第'+round+'問';
+    b.textContent = '第'+displayRound(round)+'問';
     b.onclick = ()=>loadPlayerGalleryRound(round, odai);
     list.appendChild(b);
   });
@@ -619,7 +620,7 @@ async function openPlayerGallery(){
   loadPlayerGalleryRound(rounds[rounds.length-1], seen.get(rounds[rounds.length-1]));
 }
 async function loadPlayerGalleryRound(round, odai){
-  $('pgOdai').textContent = '第'+round+'問「'+odai+'」';
+  $('pgOdai').textContent = '第'+displayRound(round)+'問「'+odai+'」';
   const { data, error } = await sb.from('submissions')
     .select('name, image_url').eq('room_id', ROOM_ID).eq('round', round).is('deleted_at', null).order('created_at');
   const g = $('pgGallery'); g.innerHTML='';
@@ -647,6 +648,7 @@ async function toggleLibrary(){
   if(opening) await loadLibrary('votes');
 }
 async function loadLibrary(sortBy){
+  await buildRoundDisplayMap();
   const { data: subs, error } = await sb.from('submissions')
     .select('id, round, name, image_url, created_at').eq('room_id', ROOM_ID).is('deleted_at', null);
   if(error){ $('libraryGallery').textContent='読み込みエラー: '+error.message; return; }
@@ -668,13 +670,14 @@ async function loadLibrary(sortBy){
     const el=document.createElement('div'); el.className='thumb';
     el.innerHTML = (sortBy==='votes' ? '<span class="votecount">'+(counts[sub.id]||0)+'</span>' : '')+
       '<img src="'+sub.image_url+'" alt="'+escapeHtml(sub.name)+'"/>'+
-      '<div class="n">第'+sub.round+'問 '+escapeHtml(sub.name)+'</div>';
+      '<div class="n">第'+displayRound(sub.round)+'問 '+escapeHtml(sub.name)+'</div>';
     g.appendChild(el);
   });
 }
 
 /* ===================== 本日の1位、まとめて表彰 ===================== */
 async function announceDailyChampions(){
+  await buildRoundDisplayMap();
   const { data: room } = await sb.from('rooms').select('current_stream_id').eq('id', ROOM_ID).maybeSingle();
   if(!room || !room.current_stream_id){ alert('まだ「配信を開始」が押されていません'); return; }
 
@@ -696,7 +699,7 @@ async function announceDailyChampions(){
     const s = subOf(r);
     return '<div class="thumb">'+
       (s ? '<img src="'+s.image_url+'" alt="'+escapeHtml(s.name)+'"/>' : '')+
-      '<div class="n">第'+r.round+'問 '+escapeHtml(nameOf(r))+'さん</div>'+
+      '<div class="n">第'+displayRound(r.round)+'問 '+escapeHtml(nameOf(r))+'さん</div>'+
       '<div style="font-size:11px;color:var(--sub);text-align:center;">「'+escapeHtml((s&&s.odai)||'')+'」</div>'+
       '</div>';
   });
@@ -1614,8 +1617,9 @@ async function toggleHistory(){
 }
 
 async function loadHistoryList(){
+  await buildRoundDisplayMap();
   const { data, error } = await sb.from('submissions')
-    .select('round, odai').eq('room_id', ROOM_ID).order('round');
+    .select('round, odai').eq('room_id', ROOM_ID).is('deleted_at', null).order('round');
   if(error){ $('historyList').textContent = '読み込みエラー: '+error.message; return; }
 
   const seen = new Map();
@@ -1633,7 +1637,7 @@ async function loadHistoryList(){
   [...seen.entries()].forEach(([round, odai])=>{
     const b = document.createElement('button');
     b.className = 'tool-btn'; b.style.width='auto';
-    b.textContent = '第'+round+'問';
+    b.textContent = '第'+displayRound(round)+'問';
     b.onclick = ()=>loadHistoryRound(round, odai);
     list.appendChild(b);
   });
@@ -1645,7 +1649,7 @@ async function loadHistoryList(){
 async function loadHistoryRound(round, odai){
   window._historyRound = round;
   window._historyOdai = odai;
-  $('historyOdai').textContent = '第'+round+'問「'+odai+'」';
+  $('historyOdai').textContent = '第'+displayRound(round)+'問「'+odai+'」';
   const { data, error } = await sb.from('submissions')
     .select('name, image_url').eq('room_id', ROOM_ID).eq('round', round).is('deleted_at', null).order('created_at');
   const g = $('historyGallery'); g.innerHTML='';
@@ -1660,12 +1664,12 @@ async function loadHistoryRound(round, odai){
 async function deleteCurrentHistoryRound(){
   const round = window._historyRound;
   if(round === undefined || round === null){ alert('削除する回が選ばれていません'); return; }
-  if(!confirm('第'+round+'問「'+(window._historyOdai||'')+'」の作品・投票をすべて削除します。\n※この操作は元に戻せません。\n\n本当に削除しますか？')) return;
+  if(!confirm('第'+displayRound(round)+'問「'+(window._historyOdai||'')+'」の作品・投票をすべて削除します。\n※この操作は元に戻せません。\n\n本当に削除しますか？')) return;
 
   const { error } = await sb.rpc('host_delete_round', { p_room_id: ROOM_ID, p_host_key: HOST_KEY, p_round: round });
   if(error){ alert('エラー: '+error.message); return; }
 
-  alert('第'+round+'問を削除しました。');
+  alert('削除しました。');
   await loadHistoryList(); // 一覧を再読み込み
 }
 
@@ -2173,6 +2177,24 @@ async function submitArt(){
 }
 
 function setStatus(id,msg,cls){ const el=$(id); el.textContent=msg; el.className='status'+(cls?' '+cls:''); }
+/* 実際のround番号 → 表示用の連番(1,2,3...) の対応表を作る。
+   削除で歯抜けになった番号を、表示だけ詰めて見せるために使う。 */
+async function buildRoundDisplayMap(){
+  const { data } = await sb.from('submissions')
+    .select('round').eq('room_id', ROOM_ID).is('deleted_at', null);
+  const rounds = [...new Set((data||[]).map(r=>r.round))].sort((a,b)=>a-b);
+  const map = {};
+  rounds.forEach((r, i)=>{ map[r] = i+1; });   // 小さい順に 1,2,3...
+  window._roundDisplayMap = map;
+  return map;
+}
+/* 実際のround番号を、表示用の連番に変換（対応表が無ければそのまま返す） */
+function displayRound(actualRound){
+  const m = window._roundDisplayMap;
+  if(m && m[actualRound]) return m[actualRound];
+  return actualRound;
+}
+
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ===================== レベル/累計花丸(プレイヤー) ===================== */
