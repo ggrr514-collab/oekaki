@@ -868,9 +868,10 @@ function bgmForPhase(phase){
 function enableDisplayBgm(){
   _bgmEnabled = true;
   bgmSetup();
-  // 無音を一度再生して再生許可を得る
-  _bgmAudio.play().then(()=>{ _bgmAudio.pause(); bgmForPhase(window._dispPhase); })
-    .catch(()=>{ bgmForPhase(window._dispPhase); });
+  // フェーズが不明なら待機(lobby)として扱い、押した瞬間からBGMを鳴らす
+  const phase = window._dispPhase || 'lobby';
+  _bgmAudio.play().then(()=>{ _bgmAudio.pause(); bgmForPhase(phase); })
+    .catch(()=>{ bgmForPhase(phase); });
   const w = $('bgmVolWrap'); if(w) w.style.display = 'flex';
 }
 function setBgmVolume(v){
