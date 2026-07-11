@@ -881,11 +881,11 @@ function bgmForPhase(phase){
 function enableDisplayBgm(){
   _bgmEnabled = true;
   bgmSetup();
-  // フェーズが不明なら待機(lobby)として扱い、押した瞬間からBGMを鳴らす
-  const phase = window._dispPhase || 'lobby';
-  _bgmAudio.play().then(()=>{ _bgmAudio.pause(); bgmForPhase(phase); })
-    .catch(()=>{ bgmForPhase(phase); });
   const w = $('bgmVolWrap'); if(w) w.style.display = 'flex';
+  // ユーザー操作の瞬間に、今のフェーズ（不明なら待機）のBGMを直接鳴らす
+  const phase = window._dispPhase || 'lobby';
+  _bgmCurrent = null;       // 念のため状態をリセットして確実に鳴らす
+  bgmForPhase(phase);
 }
 function setBgmVolume(v){
   bgmSetup();
@@ -896,6 +896,7 @@ function setBgmVolume(v){
 function runDisplayMode(roomId){
   ROOM_ID = roomId;
   console.log('[Display] 起動しました。room=', roomId);
+  window._dispPhase = 'lobby';   // 初期は待機画面とみなす（BGMがすぐ鳴らせるように）
   $('displayBoard').classList.remove('hide');
   $('roomCodeDisp').textContent = roomId;
   setAvaExprGeneric('avaFaceDisp', 'neutral');
@@ -2128,6 +2129,14 @@ function playerOnRoomChange(room){
     if(window._lastResultKey !== key){
       window._lastResultKey = key;
       showResult(room.winner_submission_id);
+    }
+  } else if(room.phase === 'lobby'){
+    // ホストが結果発表後に待機画面へ戻した → 参加者も待機画面へ
+    const name = PLAYER_NAME || '';
+    if(PLAYER_ROLE === 'drawer'){
+      setLobby('お題が出るのを待っています', (name ? name+' さんとして待機中' : '待機中'));
+    } else {
+      setLobby('お題が出るのを待っています', '視聴中');
     }
   }
 }
