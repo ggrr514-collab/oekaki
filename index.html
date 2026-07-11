@@ -838,7 +838,7 @@ async function createRoom(){
 /* ===================== BGM（配信画面でフェーズに応じて自動切替） ===================== */
 const BGM_TRACKS = {
   gymnopedie:      'bgm/gymnopedie.mp3',        // 待機・投票
-  gymnopedieGuitar:'bgm/gymnopedie-guitar.mp3', // お絵描き中
+  gymnopedieGuitar:'bgm/draw-chill.mp3', // お絵描き中（チル曲）
 };
 let _bgmAudio = null;
 let _bgmCurrent = null;
@@ -868,7 +868,7 @@ function bgmStop(){
 function bgmForPhase(phase){
   if(!_bgmEnabled) return;
   if(phase === 'draw' || phase === 'closed'){
-    bgmPlay('gymnopedieGuitar');           // お絵描き中はギター
+    bgmPlay('gymnopedieGuitar');           // お絵描き中はチル曲
   } else if(phase === 'vote1' || phase === 'final' || phase === 'lobby' || !phase){
     bgmPlay('gymnopedie');                  // 待機・投票は通常版
   }
