@@ -1408,6 +1408,15 @@ function hostOnRoomChange(room){
       final:['決勝だ、盛り上がってきた！','surprise'], result:['はい、花丸ー！！','hanamaru'] };
     if(auto[room.phase]) avaSay(auto[room.phase][0], auto[room.phase][1]);
   }
+
+  // 結果発表に入ったら、15秒後に自動で待機画面へ戻す（手動進行時のみ。オート中はオートに任せる）
+  clearTimeout(window._autoLobbyTimer);
+  if(room.phase === 'result' && !AUTO_RUNNING){
+    window._autoLobbyTimer = setTimeout(()=>{
+      // 15秒の間にホストが手動で先へ進めていなければ戻す
+      if(window._hostPhase === 'result' && !AUTO_RUNNING){ returnToLobby(); }
+    }, 15000);
+  }
 }
 function updateHostButtons(phase){
   const set = (id, enabled)=>{ const b=$(id); if(b) b.disabled = !enabled; };
