@@ -92,6 +92,7 @@
   .winnerMarqueeTrack{display:flex;gap:24px;width:max-content;animation:marquee 28s linear infinite;}
   .winnerMarqueeTrack:hover, .winnerMarqueeTrack:active{animation-play-state:paused;}
   @keyframes marquee{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+  @keyframes cmtPulse{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.04);} }
   /* 待機画面の動くタイトル（手書き風に左から書き上がる） */
   .animTitle{
     display:inline-block; position:relative;
@@ -223,6 +224,7 @@
     <div style="margin-top:14px;background:var(--stage-2);border:1px solid var(--line);border-radius:14px;padding:12px;" class="avaTopRow">
       <div class="avaWrap"><img id="avaFaceDisp" alt="アバター"/></div>
       <div class="avaBubble hide" id="avaBubbleDisp"></div>
+      <div style="margin-left:auto;background:var(--gold);color:#2a2410;border-radius:14px;padding:10px 16px;font-family:'Yusei Magic',sans-serif;font-weight:900;font-size:17px;line-height:1.5;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,.3);animation:cmtPulse 3s ease-in-out infinite;">💬 描いてほしいお題を<br>コメントにどうぞ！</div>
     </div>
   </div>
 
@@ -270,6 +272,9 @@
     </div>
     <div class="odaiRow">
       <input id="odaiInput" placeholder="お題を入力（例：あなただけの最強を描け）" />
+    </div>
+    <div class="odaiRow">
+      <input id="requesterInput" placeholder="リクエストした人（任意・例：たろう）" />
     </div>
     <div class="odaiRow" style="flex-wrap:wrap;">
       <button class="btn" id="btnNext" style="width:auto;background:var(--mascot-blue);color:#fff;" onclick="nextPhase()">▶ 次へ</button>
@@ -981,7 +986,9 @@ function renderDisplayPhase(room){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
     $('galleryDisp').classList.remove('hide');
-    $('odaiDisp').textContent = 'お題「'+room.odai+'」';
+    { const p = parseOdai(room.odai);
+      $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」' +
+        (p.requester ? ' <span style="font-size:14px;color:var(--gold);">💬 '+escapeHtml(p.requester)+' さんのリクエスト</span>' : ''); }
     $('timerRowDisp').classList.remove('hide');
     const elapsed = (Date.now()-new Date(room.started_at).getTime())/1000;
     const remain = Math.max(0, Math.round((room.duration_sec||90)-elapsed));
@@ -989,13 +996,17 @@ function renderDisplayPhase(room){
   } else if(room.phase === 'closed'){
     stopLobbyIdle();
     $('timerRowDisp').classList.add('hide');
-    $('odaiDisp').textContent = 'お題「'+room.odai+'」（締切）';
+    { const p = parseOdai(room.odai);
+      $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」（締切）' +
+        (p.requester ? ' <span style="font-size:14px;color:var(--gold);">💬 '+escapeHtml(p.requester)+' さんのリクエスト</span>' : ''); }
   } else if(room.phase === 'vote1' || room.phase === 'final'){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
     $('galleryDisp').classList.remove('hide');
     $('timerRowDisp').classList.add('hide');
-    $('odaiDisp').textContent = 'お題「'+room.odai+'」';
+    { const p = parseOdai(room.odai);
+      $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」' +
+        (p.requester ? ' <span style="font-size:14px;color:var(--gold);">💬 '+escapeHtml(p.requester)+' さんのリクエスト</span>' : ''); }
     startVoteCountdown(room.vote_deadline, $('voteCountdownDisp'));
     const stage = room.phase === 'final' ? 2 : 1;
     const key = room.round+'-'+stage;
@@ -1595,13 +1606,17 @@ async function startDraw(){
   const odai = $('odaiInput').value.trim();
   if(!odai){ alert('お題を入力してください'); return; }
   if(containsNgWord(odai)){ alert('このお題には使用できない言葉が含まれています'); return; }
+  const requester = ($('requesterInput') ? $('requesterInput').value.trim() : '');
+  if(requester && containsNgWord(requester)){ alert('リクエスト者名に使用できない言葉が含まれています'); return; }
+  // お題とリクエスト者名を区切り文字でまとめて運ぶ（DB変更なし）
+  const odaiField = requester ? (odai + '‖' + requester) : odai;
   const nextRound = CURRENT_ROUND + 1;
   CURRENT_ROUND = nextRound;
   $('gallery').innerHTML = '';
   $('subCount').textContent = '0';
 
   const { error } = await hostUpdateRoom({
-    phase: 'draw', odai, round: nextRound, started_at: new Date().toISOString(), duration_sec: 90, vote_deadline: ''
+    phase: 'draw', odai: odaiField, round: nextRound, started_at: new Date().toISOString(), duration_sec: 90, vote_deadline: ''
   });
   if(error){ alert('エラー: '+error.message); return; }
   // 使ったお題はキューから取り除き、入力欄も次に備えて空にする
@@ -1611,6 +1626,7 @@ async function startDraw(){
     renderQueueChips();
   }
   $('odaiInput').value = '';
+  if($('requesterInput')) $('requesterInput').value = '';
 }
 
 async function closeRound(){
@@ -2197,13 +2213,15 @@ function playerOnRoomChange(room){
 
 function enterDraw(odai, startedAt, durationSec){
   window._practiceMode = false;
-  CURRENT_ODAI = odai;
+  const parsed = parseOdai(odai);
+  CURRENT_ODAI = parsed.odai;
   stopVoteCountdown();
   stopPlayerLobbyIdle();
   $('playerLobby').classList.add('hide');
   $('submittedScreen').classList.add('hide');
   $('drawScreen').classList.remove('hide');
-  $('drawOdai').textContent = odai;
+  $('drawOdai').innerHTML = escapeHtml(parsed.odai) +
+    (parsed.requester ? '<div style="font-size:12px;color:var(--gold);margin-top:2px;">💬 '+escapeHtml(parsed.requester)+' さんのリクエスト</div>' : '');
   $('timebar').parentElement.style.display = '';   // タイマー表示を戻す
   $('practiceTools').classList.add('hide');
   $('realTools').classList.remove('hide');
@@ -2362,6 +2380,15 @@ function displayRound(actualRound){
   return actualRound;
 }
 
+/* お題欄に埋め込んだ「お題‖リクエスト者名」を分解する。
+   リクエスト者が無ければ requester は空文字。 */
+function parseOdai(odaiField){
+  const s = odaiField || '';
+  const i = s.indexOf('‖');
+  if(i === -1) return { odai: s, requester: '' };
+  return { odai: s.slice(0, i), requester: s.slice(i + 1) };
+}
+
 function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ===================== レベル/累計花丸(プレイヤー) ===================== */
@@ -2446,7 +2473,8 @@ async function enterVote(round, stage, filterIds){
     : '絵をタップで拡大 ─ 面白い絵に花丸を！';
 
   const { data: roomRow } = await sb.from('rooms').select('odai, vote_deadline').eq('id', ROOM_ID).maybeSingle();
-  $('voteOdai').textContent = (roomRow && roomRow.odai) ? 'お題「'+roomRow.odai+'」' : '';
+  { const p = parseOdai(roomRow && roomRow.odai);
+    $('voteOdai').textContent = p.odai ? 'お題「'+p.odai+'」' : ''; }
   startVoteCountdown(roomRow && roomRow.vote_deadline, $('voteCountdown'));
 
   let query = sb.from('submissions').select('id, name, image_url, strokes').eq('room_id', ROOM_ID).eq('round', round).is('deleted_at', null);
