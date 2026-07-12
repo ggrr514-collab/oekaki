@@ -92,18 +92,26 @@
   .winnerMarqueeTrack{display:flex;gap:24px;width:max-content;animation:marquee 28s linear infinite;}
   .winnerMarqueeTrack:hover, .winnerMarqueeTrack:active{animation-play-state:paused;}
   @keyframes marquee{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
-  /* 待機画面の動くタイトル */
+  /* 待機画面の動くタイトル（手書き風に左から書き上がる） */
   .animTitle{
     display:inline-block; position:relative;
     font-family:'Yusei Magic',sans-serif;
     color:#ffcb45;
     font-weight:900;
     text-shadow:0 2px 0 #b8791a, 0 0 18px rgba(245,166,35,.6);
-    animation: titlePulse 2.2s ease-in-out infinite;
   }
-  @keyframes titlePulse{ 0%,100%{ transform:scale(1) rotate(-1deg);} 50%{ transform:scale(1.05) rotate(1deg);} }
-  .animTitle .ch{ display:inline-block; animation: chBounce 2.4s ease-in-out infinite; }
-  @keyframes chBounce{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-8px);} }
+  .animTitle .ch{
+    display:inline-block;
+    opacity:0;
+    transform: translateX(-14px) translateY(6px) rotate(-12deg) scale(0.7);
+    animation: chWrite 0.45s cubic-bezier(.3,1.4,.5,1) forwards;
+  }
+  @keyframes chWrite{
+    to{ opacity:1; transform: translateX(0) translateY(0) rotate(0) scale(1); }
+  }
+  /* 書き終わったタイトル全体が、ときどきぷるっと弾む */
+  .animTitle.done{ animation: titleWiggle 3.2s ease-in-out infinite; }
+  @keyframes titleWiggle{ 0%,92%,100%{ transform:rotate(0) scale(1);} 96%{ transform:rotate(-1.5deg) scale(1.04);} }
   .voteBtn.done{background:var(--stage);color:var(--sub);box-shadow:none;}
   .thumb img{cursor:zoom-in;}
 
@@ -912,19 +920,23 @@ function runDisplayMode(roomId){
   ROOM_ID = roomId;
   console.log('[Display] 起動しました。room=', roomId);
   window._dispPhase = 'lobby';   // 初期は待機画面とみなす（BGMがすぐ鳴らせるように）
-  // タイトルを1文字ずつ包んで、波打つアニメーションにする
+  // タイトルを1文字ずつ包んで、左から手書き風に書き上がるアニメーションにする
   (function(){
     const t = $('lobbyTitleAnim');
     if(t && !t.dataset.split){
       t.dataset.split = '1';
       const chars = t.textContent.split('');
       t.textContent = '';
+      const step = 0.16; // 1文字あたりの間隔（秒）
       chars.forEach((c,i)=>{
         const s = document.createElement('span');
         s.className = 'ch'; s.textContent = c;
-        s.style.animationDelay = (i*0.08)+'s';
+        s.style.animationDelay = (i*step)+'s';
         t.appendChild(s);
       });
+      // 全文字を書き終えたら、ぷるっと弾む状態に切り替える
+      const total = chars.length*step + 0.5;
+      setTimeout(()=>{ t.classList.add('done'); }, total*1000);
     }
   })();
   $('displayBoard').classList.remove('hide');
