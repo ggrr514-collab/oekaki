@@ -186,7 +186,7 @@
   </div>
 
   <!-- ===== 配信表示画面（OBS用・操作ボタンなし） ===== -->
-  <div class="hide" id="displayBoard" style="flex:1;display:flex;flex-direction:column;padding:10px 16px;">
+  <div class="hide" id="displayBoard" style="flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 16px;">
     <div class="htop">
       <span class="pill phasepill" id="phaseBadgeDisp">🌙 ロビー</span>
       <span class="pill">部屋 <b id="roomCodeDisp"></b></span>
@@ -210,11 +210,11 @@
 
     <div class="hide" id="lobbyIdleDisp" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
       <div style="text-align:center;padding:4px 0 10px;">
-        <div class="animTitle" id="lobbyTitleAnim" style="font-size:44px;margin-bottom:6px;">秒速お絵描き選手権</div>
+        <div class="animTitle" id="lobbyTitleAnim" style="font-size:36px;margin-bottom:4px;">秒速お絵描き選手権</div>
         <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
         <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);" id="lobbyRoomCodeBig"></div>
         <div style="font-size:15px;color:var(--paper);margin-top:6px;word-break:break-all;" id="lobbyJoinUrl"></div>
-        <div id="lobbyQr" style="display:inline-block;margin-top:12px;padding:10px;background:#fff;border-radius:10px;"></div>
+        <div id="lobbyQr" style="display:inline-block;margin-top:6px;padding:7px;background:#fff;border-radius:10px;"></div>
         <div style="font-size:12px;color:var(--sub);margin-top:6px;">スマホのカメラで読み取って参加できます</div>
         <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);margin-top:10px;" id="lobbyHeadcountDisp"></div>
       </div>
@@ -1197,7 +1197,7 @@ function startLobbyIdle(){
   if(qrBox && window._qrUrl !== joinUrl && typeof QRCode !== 'undefined'){
     window._qrUrl = joinUrl;
     qrBox.innerHTML = '';
-    try{ new QRCode(qrBox, { text: joinUrl, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.M }); }
+    try{ new QRCode(qrBox, { text: joinUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M }); }
     catch(e){ console.warn('QR生成に失敗:', e); }
   }
 
