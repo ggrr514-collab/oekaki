@@ -232,7 +232,7 @@
       <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);margin-bottom:4px;">秒速お絵描き選手権</div>
       <h1 style="margin-top:0;">あそびかた</h1>
       <p class="sub" style="text-align:left;line-height:1.9;margin-bottom:18px;">
-        ① お題が出たら、みんなで絵を描く<br>
+        ① お題が出たら、90秒で絵を描く<br>
         ② できた絵に、面白いと思ったら花丸を贈る<br>
         ③ 一番花丸を集めた絵が優勝！<br>
         ④ 続けて参加すると、レベルが上がっていくよ
@@ -598,6 +598,8 @@ async function fetchRankingRows(type){
     rows = ids.map(id=>({ device_id:id, name:nameOf[id]||'名無し', value:counts[id], suffix:'回優勝' }))
       .sort((a,b)=>b.value-a.value).slice(0,100);
   }
+  // 0pt（一度も記録がない）人はランキングに出さない
+  rows = rows.filter(r => (r.value || 0) > 0);
   return rows;
 }
 function renderRankingRows(rows, targetEl){
@@ -1216,7 +1218,7 @@ function renderLobbyRules(box){
     '<span style="font-weight:700;font-size:13px;">みんなのコメントからお題を選びます</span></div>'+
     '<div style="text-align:left;line-height:2;font-size:15px;">'+
     '① コメントで集まったお題から出題<br>'+
-    '② お題が出たら、みんなで絵を描く<br>'+
+    '② お題が出たら、90秒で絵を描く<br>'+
     '③ できた絵に、面白いと思ったら花丸を贈る<br>'+
     '④ 一番花丸を集めた絵が優勝！<br>'+
     '⑤ 続けて参加すると、レベルが上がっていくよ</div>';
