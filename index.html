@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>みんなでお絵描き選手権</title>
+<title>秒速お絵描き選手権</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Yusei+Magic&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
@@ -200,7 +200,7 @@
 
     <div class="hide" id="lobbyIdleDisp" style="flex:1;display:flex;flex-direction:column;">
       <div style="text-align:center;padding:4px 0 10px;">
-        <div class="animTitle" id="lobbyTitleAnim" style="font-size:44px;margin-bottom:6px;">みんなでお絵描き選手権</div>
+        <div class="animTitle" id="lobbyTitleAnim" style="font-size:44px;margin-bottom:6px;">秒速お絵描き選手権</div>
         <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
         <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);" id="lobbyRoomCodeBig"></div>
         <div style="font-size:15px;color:var(--paper);margin-top:6px;word-break:break-all;" id="lobbyJoinUrl"></div>
@@ -229,7 +229,7 @@
   <!-- ===== 初見さんへの案内カード ===== -->
   <div class="center hide" id="ruleCard">
     <div class="panel" style="text-align:center">
-      <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);margin-bottom:4px;">みんなでお絵描き選手権</div>
+      <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);margin-bottom:4px;">秒速お絵描き選手権</div>
       <h1 style="margin-top:0;">あそびかた</h1>
       <p class="sub" style="text-align:left;line-height:1.9;margin-bottom:18px;">
         ① お題が出たら、みんなで絵を描く<br>
@@ -378,12 +378,12 @@
   <!-- ===== プレイヤー：ロビー待機 ===== -->
   <div class="hide" id="playerLobby" style="flex:1;display:flex;flex-direction:column;padding:16px;overflow-y:auto;">
     <div style="text-align:center;margin-bottom:10px;">
-      <div style="font-family:'Yusei Magic',sans-serif;font-size:24px;font-weight:900;color:#ffcb45;margin-bottom:6px;text-shadow:-1.5px -1.5px 0 #7a4e0e,1.5px -1.5px 0 #7a4e0e,-1.5px 1.5px 0 #7a4e0e,1.5px 1.5px 0 #7a4e0e,0 2px 4px rgba(0,0,0,.4);">みんなでお絵描き選手権</div>
+      <div style="font-family:'Yusei Magic',sans-serif;font-size:24px;font-weight:900;color:#ffcb45;margin-bottom:6px;text-shadow:-1.5px -1.5px 0 #7a4e0e,1.5px -1.5px 0 #7a4e0e,-1.5px 1.5px 0 #7a4e0e,1.5px 1.5px 0 #7a4e0e,0 2px 4px rgba(0,0,0,.4);">秒速お絵描き選手権</div>
       <p class="big" id="lobbyBig" style="margin:0;">お題が出るのを待っています<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
       <p class="sub" id="lobbyMsg" style="margin:4px 0 0;"></p>
       <p class="sub" id="lobbyHeadcount" style="margin:6px 0 0;color:var(--gold);"></p>
     </div>
-    <div id="playerLobbyContent" style="flex:1;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;transition:opacity .4s;"></div>
+    <div id="playerLobbyContent" style="display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;transition:opacity .4s;"></div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerGallery()">🖼 作品一覧</button>
       <button class="tool-btn" style="flex:1;padding:12px;" onclick="openPlayerRanking()">🏆 ランキング</button>
