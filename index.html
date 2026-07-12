@@ -270,6 +270,7 @@
       <span class="pill phasepill" id="phaseBadge">🌙 ロビー</span>
       <span class="pill">部屋 <b id="roomCodeDisplay"></b></span>
       <span class="pill">描き手 <b id="drawerCount">0</b> / 20 人</span>
+      <span class="pill">開始めやす <input id="minDrawersInput" type="number" min="1" max="20" value="5" style="width:44px;background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--gold);font-weight:900;text-align:center;" onchange="saveMinDrawers()"> 人</span>
       <span class="pill">視聴 <b id="voterCount">0</b> 人</span>
       <span class="pill">提出 <b id="subCount">0</b> 件</span>
       <button class="tool-btn" id="btnStartStream" style="width:auto" onclick="startStream()">📡 配信を開始</button>
@@ -855,6 +856,7 @@ async function createRoom(){
   $('hostCreate').classList.add('hide');
   $('hostBoard').classList.remove('hide');
   $('roomCodeDisplay').textContent = roomId;
+  { const md = $('minDrawersInput'); if(md) md.value = getMinDrawers(); }
 
   const link = location.origin + location.pathname + '?room=' + encodeURIComponent(roomId);
   $('joinLinkDisplay').value = link;
@@ -1691,6 +1693,12 @@ function copyLink(){
 async function startDraw(){
   const odai = $('odaiInput').value.trim();
   if(!odai){ alert('お題を入力してください'); return; }
+  // 開始めやすの人数に達していなければ確認（あなたの判断で始められる）
+  const minD = getMinDrawers();
+  const now = window._currentDrawers || 0;
+  if(now < minD){
+    if(!confirm('描き手はいま '+now+' 人です（めやす: '+minD+' 人）。\nこのまま始めますか？')) return;
+  }
   if(containsNgWord(odai)){ alert('このお題には使用できない言葉が含まれています'); return; }
   const requester = ($('requesterInput') ? $('requesterInput').value.trim() : '');
   if(requester && containsNgWord(requester)){ alert('リクエスト者名に使用できない言葉が含まれています'); return; }
@@ -1950,6 +1958,16 @@ async function subscribePlayers(){
 
 /* 待機画面(参加者・配信)向けの人数表示。
    Presence(今実際に接続している人)ベースなので、タブを閉じた人は自動で数から消える */
+function getMinDrawers(){
+  const v = parseInt(localStorage.getItem('oekaki_min_drawers')||'5', 10);
+  return (v >= 1 && v <= 20) ? v : 5;
+}
+function saveMinDrawers(){
+  const el = $('minDrawersInput'); if(!el) return;
+  let v = parseInt(el.value, 10);
+  if(!(v >= 1 && v <= 20)){ v = 5; el.value = 5; }
+  localStorage.setItem('oekaki_min_drawers', String(v));
+}
 function startHeadcountWatch(){
   if(window._headcountWatching) return;
   window._headcountWatching = true;
@@ -1960,7 +1978,13 @@ function startHeadcountWatch(){
       if(role === 'drawer') drawers++;
       else if(role === 'voter') voters++;
     });
-    const text = '🎨 描き手 '+drawers+' 人　👀 見てる人 '+voters+' 人';
+    window._currentDrawers = drawers;
+    const minD = getMinDrawers();
+    const remain = Math.max(0, minD - drawers);
+    const startNote = remain > 0
+      ? '　🎨 あと'+remain+'人で開始！'
+      : '　✅ スタートできます！';
+    const text = '🎨 描き手 '+drawers+' 人　👀 見てる人 '+voters+' 人' + startNote;
     const a = $('lobbyHeadcount'); if(a) a.textContent = text;
     const b = $('lobbyHeadcountDisp'); if(b) b.textContent = text;
     const dc = $('drawerCount'); if(dc) dc.textContent = drawers;
