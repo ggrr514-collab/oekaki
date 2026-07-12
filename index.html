@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<title>Step2: お題配布 + 描画 + 提出</title>
+<title>みんなでお絵描き選手権</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Yusei+Magic&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
@@ -92,6 +92,22 @@
   .winnerMarqueeTrack{display:flex;gap:24px;width:max-content;animation:marquee 28s linear infinite;}
   .winnerMarqueeTrack:hover, .winnerMarqueeTrack:active{animation-play-state:paused;}
   @keyframes marquee{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+  /* 待機画面の動くタイトル */
+  .animTitle{
+    display:inline-block; position:relative;
+    font-family:'Yusei Magic',sans-serif; color:var(--gold);
+    background:linear-gradient(90deg,#f5a623 0%,#ffe08a 25%,#f5a623 50%,#ffd166 75%,#f5a623 100%);
+    background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    animation: titleShine 3s linear infinite, titlePulse 2.2s ease-in-out infinite;
+    text-shadow:0 2px 0 rgba(0,0,0,.15);
+    filter: drop-shadow(0 4px 10px rgba(245,166,35,.35));
+  }
+  @keyframes titleShine{ to{ background-position:200% center; } }
+  @keyframes titlePulse{ 0%,100%{ transform:scale(1) rotate(-1deg);} 50%{ transform:scale(1.06) rotate(1deg);} }
+  .animTitle .ch{ display:inline-block; animation: chBounce 2.4s ease-in-out infinite; }
+  @keyframes chBounce{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-8px);} }
   .voteBtn.done{background:var(--stage);color:var(--sub);box-shadow:none;}
   .thumb img{cursor:zoom-in;}
 
@@ -178,6 +194,7 @@
 
     <div class="hide" id="lobbyIdleDisp" style="flex:1;display:flex;flex-direction:column;">
       <div style="text-align:center;padding:10px 0 18px;">
+        <div class="animTitle" id="lobbyTitleAnim" style="font-size:44px;margin-bottom:6px;">みんなでお絵描き選手権</div>
         <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
         <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);" id="lobbyRoomCodeBig"></div>
         <div style="font-size:15px;color:var(--paper);margin-top:6px;word-break:break-all;" id="lobbyJoinUrl"></div>
@@ -206,7 +223,8 @@
   <!-- ===== 初見さんへの案内カード ===== -->
   <div class="center hide" id="ruleCard">
     <div class="panel" style="text-align:center">
-      <h1>あそびかた</h1>
+      <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);margin-bottom:4px;">みんなでお絵描き選手権</div>
+      <h1 style="margin-top:0;">あそびかた</h1>
       <p class="sub" style="text-align:left;line-height:1.9;margin-bottom:18px;">
         ① お題が出たら、みんなで絵を描く<br>
         ② できた絵に、面白いと思ったら花丸を贈る<br>
@@ -335,7 +353,8 @@
 
       <div id="tosBlock" style="background:var(--stage);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:#c9c4d6;line-height:1.6;">
         「描いて参加する」を選ぶ方へ：
-        <br>・あなたが描いた作品の著作権はあなたに残ります。ただし参加することで、運営がこのゲーム内での表示に加え、グッズ化・3Dプリント化などの商品化に利用することを許諾したものとします（商品化する場合、収益の一部還元を予定しています）。
+        <br>・あなたが描いた作品の著作権はあなたに残ります。作品は販売・商品化されません。参加することで、運営がこのゲーム内での表示に加え、配信映像・SNS・宣伝での紹介に作品を使うことを許諾したものとします。
+        <br>・作品はあなた自身の判断と責任で描いてください。第三者の権利を侵害するおそれがあるものは、運営の判断で非表示・削除することがあります。
         <br>・<b>13歳未満の方はご参加いただけません。</b>13〜17歳の方は、保護者の同意を得た上でご参加ください。
         <label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;cursor:pointer;">
           <input type="checkbox" id="tosCheck" style="width:auto;margin:2px 0 0;flex:none;" />
@@ -640,7 +659,7 @@ function containsNgWord(text){
   const t = (text||'').toLowerCase();
   return NG_WORDS.some(w=>t.includes(w.toLowerCase()));
 }
-/* ===================== 作品ライブラリ（3Dプリント選定用） ===================== */
+/* ===================== 作品ライブラリ（過去作品の一覧・保存用） ===================== */
 async function toggleLibrary(){
   const panel = $('libraryPanel');
   const opening = panel.classList.contains('hide');
@@ -897,6 +916,21 @@ function runDisplayMode(roomId){
   ROOM_ID = roomId;
   console.log('[Display] 起動しました。room=', roomId);
   window._dispPhase = 'lobby';   // 初期は待機画面とみなす（BGMがすぐ鳴らせるように）
+  // タイトルを1文字ずつ包んで、波打つアニメーションにする
+  (function(){
+    const t = $('lobbyTitleAnim');
+    if(t && !t.dataset.split){
+      t.dataset.split = '1';
+      const chars = t.textContent.split('');
+      t.textContent = '';
+      chars.forEach((c,i)=>{
+        const s = document.createElement('span');
+        s.className = 'ch'; s.textContent = c;
+        s.style.animationDelay = (i*0.08)+'s';
+        t.appendChild(s);
+      });
+    }
+  })();
   $('displayBoard').classList.remove('hide');
   $('roomCodeDisp').textContent = roomId;
   setAvaExprGeneric('avaFaceDisp', 'neutral');
@@ -1030,12 +1064,16 @@ async function showDisplayResult(winnerSubId){
 
 /* ===================== ロビー待機演出(Display) ===================== */
 const LOBBY_MURMURS = [
+  ['描いてほしいお題、コメントで教えてー！','laugh'],
+  ['お題はみんなのコメントから選ぶよ！','hanamaru'],
+  ['キャラの名前じゃなくて、自由な発想でね！','surprise'],
+  ['こんなの描いてほしい、ってある？','surprise'],
   ['今日は何を描こうかな〜','neutral'],
   ['腕がなまってないか心配だぜ','think'],
   ['そろそろ始まるかな…','neutral'],
   ['みんな準備はいいかい？','laugh'],
   ['花丸、たくさん贈ってくれよな','hanamaru'],
-  ['今日はどんな絵が見られるかなぁ','surprise'],
+  ['お題のリクエスト、待ってるぜ！','laugh'],
 ];
 
 function startLobbyIdle(){
@@ -1163,12 +1201,21 @@ async function renderLobbyRanking(box){
 function renderLobbyRules(box){
   box.innerHTML =
     '<div style="font-family:\'Yusei Magic\';color:var(--gold);font-size:18px;margin-bottom:14px;">あそびかた</div>'+
+    '<div style="background:var(--gold);color:#2a2410;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-weight:900;font-size:16px;line-height:1.5;">'+
+    '💬 描いてほしいお題を<br>コメントで送ってね！<br>'+
+    '<span style="font-weight:700;font-size:13px;">みんなのコメントからお題を選びます</span></div>'+
+    '<div style="background:#2a2410;color:#ffd166;border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:13px;line-height:1.6;text-align:left;">'+
+    '⚠️ <b>お願い</b><br>'+
+    'アニメ・ゲームなどの<b>キャラクター名や作品名</b>は使えません。<br>'+
+    '「◯◯みたいな△△」もNG。<br>'+
+    '自由な発想のお題を送ってね！（例：「最強のパン」「泣いてる家具」）</div>'+
     '<div style="text-align:left;line-height:2;font-size:15px;">'+
-    '① お題が出たら、みんなで絵を描く<br>'+
-    '② できた絵に、面白いと思ったら花丸を贈る<br>'+
-    '③ 一番花丸を集めた絵が優勝！<br>'+
-    '④ 続けて参加すると、レベルが上がっていくよ</div>';
-  if(DISPLAY_MODE) displayAvaSay('参加はかんたん！さっそく描いてみよう', 'laugh');
+    '① コメントで集まったお題から出題<br>'+
+    '② お題が出たら、みんなで絵を描く<br>'+
+    '③ できた絵に、面白いと思ったら花丸を贈る<br>'+
+    '④ 一番花丸を集めた絵が優勝！<br>'+
+    '⑤ 続けて参加すると、レベルが上がっていくよ</div>';
+  if(DISPLAY_MODE) displayAvaSay('描いてほしいお題をコメントしてね！', 'laugh');
 }
 
 /* ===================== アバターの発言をControlからDisplayへ中継 ===================== */
@@ -1695,7 +1742,7 @@ async function nextPhase(){
 
 /* すべての開催記録・作品・投票・問題番号をまっさらに戻す（誤操作防止に2段階確認） */
 async function resetAll(){
-  if(!confirm('【全リセット】これまでの作品・投票・開催記録をすべて消し、第1問に戻します。\n※商品化したい作品がある場合は、先に「作品ライブラリ」で保存しておいてください。\n\n本当に実行しますか？')) return;
+  if(!confirm('【全リセット】これまでの作品・投票・開催記録をすべて消し、第1問に戻します。\n※残しておきたい作品がある場合は、先に「作品ライブラリ」で確認しておいてください。\n\n本当に実行しますか？')) return;
   const phrase = prompt('確認のため「リセット」と入力してください');
   if(phrase !== 'リセット'){ alert('入力が一致しなかったため、中止しました'); return; }
 
@@ -2197,7 +2244,7 @@ function subscribeRoom(onChange){
 
 /* ===================== キャンバス(白紙・シンプル版) ===================== */
 const W=1000,H=750;
-const COLORS=['#000000']; // 黒一色（将来の3Dプリント連携のため）
+const COLORS=['#000000']; // 黒一色（線をくっきり見せるため）
 let color='#000000', size=7, strokes=[], cur=null, drawing=false, padCtx=null, padBound=false, timer=null;
 
 function sizeCanvas(cv){
@@ -2234,7 +2281,7 @@ function bindPad(){
 function undo(){ strokes.pop(); redraw(); }
 function resetStrokes(){ strokes=[]; redraw(); }
 function buildSwatches(){
-  // 黒一色に固定（将来の3Dプリント連携のため色選択は廃止）
+  // 黒一色に固定（線をくっきり見せるため色選択は廃止）
 }
 function startTimer(seconds){
   const bar=$('timebar'), tick=$('tick');
