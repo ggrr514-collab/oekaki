@@ -197,22 +197,17 @@
     <p id="voteCountdownDisp" style="font-family:'Yusei Magic';font-size:18px;color:#ff8a3d;text-align:center;margin:0 0 6px;min-height:22px;"></p>
     <div class="timer hide" id="timerRowDisp" style="margin:0 0 10px;"><div class="bar" id="timebarDisp"></div></div>
 
-    <div class="hgrid" id="galleryDisp" style="flex:1;overflow-y:auto;"></div>
-    <div class="hide" id="drawIdleDisp" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
-      <div style="font-family:'Yusei Magic';font-size:34px;color:var(--paper);">✏️ いまみんな描いています！</div>
-      <div id="drawCountBig" style="font-family:'Yusei Magic';font-size:96px;line-height:1;color:var(--gold);font-weight:900;"></div>
-      <div style="font-size:16px;color:var(--sub);">できあがった絵は、このあとの投票でお披露目！</div>
-      <div style="display:flex;align-items:center;gap:18px;margin-top:6px;">
-        <div id="drawQr" style="background:#fff;border-radius:10px;padding:8px;"></div>
-        <div style="text-align:left;">
-          <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);">とちゅう参加もOK！</div>
-          <div style="font-size:13px;color:var(--sub);">スマホのカメラで読み取ってね</div>
-          <div style="font-size:13px;color:var(--sub);margin-top:6px;">💬 次に描いてほしいお題も<br>コメントで募集中！</div>
-        </div>
+    <div class="hgrid" id="galleryDisp" style="flex:1;min-height:0;overflow-y:auto;"></div>
+    <div class="hide" id="drawIdleDisp" style="display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 12px;background:var(--stage-2);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;">
+      <div style="font-family:'Yusei Magic';font-size:18px;color:var(--paper);">✏️ できた絵から、ここに登場！</div>
+      <div id="drawCountBig" style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);font-weight:900;min-width:150px;text-align:center;"></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="drawQr" style="background:#fff;border-radius:8px;padding:5px;"></div>
+        <div style="text-align:left;font-size:12px;color:var(--sub);line-height:1.5;">とちゅう参加もOK！<br>💬 次のお題もコメント募集中</div>
       </div>
     </div>
 
-    <div class="hide" id="lobbyIdleDisp" style="flex:1;display:flex;flex-direction:column;">
+    <div class="hide" id="lobbyIdleDisp" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
       <div style="text-align:center;padding:4px 0 10px;">
         <div class="animTitle" id="lobbyTitleAnim" style="font-size:44px;margin-bottom:6px;">秒速お絵描き選手権</div>
         <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
@@ -222,7 +217,7 @@
         <div style="font-size:12px;color:var(--sub);margin-top:6px;">スマホのカメラで読み取って参加できます</div>
         <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);margin-top:10px;" id="lobbyHeadcountDisp"></div>
       </div>
-      <div id="lobbyContent" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;"></div>
+      <div id="lobbyContent" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;"></div>
     </div>
 
     <div class="hide" id="resultBlockDisp" style="text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
@@ -998,7 +993,7 @@ function renderDisplayPhase(room){
   if(room.phase === 'draw'){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
-    $('galleryDisp').classList.add('hide');
+    $('galleryDisp').classList.remove('hide');
     $('drawIdleDisp').classList.remove('hide');
     ensureDrawQr();
     { const p = parseOdai(room.odai);
@@ -1011,9 +1006,10 @@ function renderDisplayPhase(room){
   } else if(room.phase === 'closed'){
     stopLobbyIdle();
     $('timerRowDisp').classList.add('hide');
-    $('galleryDisp').classList.add('hide');
+    $('galleryDisp').classList.remove('hide');
     $('drawIdleDisp').classList.remove('hide');
     ensureDrawQr();
+    clearInterval(window._drawCountT);
     $('drawCountBig').textContent = '締切！';
     { const p = parseOdai(room.odai);
       $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」（締切）' +
@@ -1078,7 +1074,7 @@ function ensureDrawQr(){
   if(typeof QRCode === 'undefined') return;
   window._drawQrUrl = joinUrl;
   box.innerHTML = '';
-  try{ new QRCode(box, { text: joinUrl, width: 110, height: 110, correctLevel: QRCode.CorrectLevel.M }); }
+  try{ new QRCode(box, { text: joinUrl, width: 74, height: 74, correctLevel: QRCode.CorrectLevel.M }); }
   catch(e){ console.warn('QR生成に失敗:', e); }
 }
 
@@ -2205,6 +2201,8 @@ async function joinRoom(role){
 
 function setLobby(bigText, msgText){
   stopVoteCountdown();
+  // 待機画面以外（結果発表・描画・投票・提出済み）をすべて隠す
+  ['resultScreen','drawScreen','voteScreen','submittedScreen'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hide'); });
   $('lobbyBig').innerHTML = bigText + '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
   $('lobbyMsg').textContent = msgText || '';
   $('playerLobby').classList.remove('hide');
