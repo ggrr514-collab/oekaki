@@ -186,18 +186,31 @@
   </div>
 
   <!-- ===== 配信表示画面（OBS用・操作ボタンなし） ===== -->
-  <div class="hide" id="displayBoard" style="flex:1;display:flex;flex-direction:column;padding:20px;">
+  <div class="hide" id="displayBoard" style="flex:1;display:flex;flex-direction:column;padding:10px 16px;">
     <div class="htop">
       <span class="pill phasepill" id="phaseBadgeDisp">🌙 ロビー</span>
       <span class="pill">部屋 <b id="roomCodeDisp"></b></span>
       <button class="tool-btn" id="btnEnableSound" style="width:auto;margin-left:auto;" onclick="enableDisplaySound(); enableDisplayBgm();">🔊 音・BGMを有効にする</button>
       <label id="bgmVolWrap" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--sub);">🎵<input type="range" id="bgmVol" min="0" max="100" value="35" style="width:90px;" oninput="setBgmVolume(this.value)"/></label>
     </div>
-    <p id="odaiDisp" style="font-family:'Yusei Magic';font-size:24px;color:var(--gold);text-align:center;margin:16px 0 4px;min-height:34px;"></p>
+    <p id="odaiDisp" style="font-family:'Yusei Magic';font-size:24px;color:var(--gold);text-align:center;margin:6px 0 2px;min-height:34px;"></p>
     <p id="voteCountdownDisp" style="font-family:'Yusei Magic';font-size:18px;color:#ff8a3d;text-align:center;margin:0 0 6px;min-height:22px;"></p>
     <div class="timer hide" id="timerRowDisp" style="margin:0 0 10px;"><div class="bar" id="timebarDisp"></div></div>
 
     <div class="hgrid" id="galleryDisp" style="flex:1;overflow-y:auto;"></div>
+    <div class="hide" id="drawIdleDisp" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;">
+      <div style="font-family:'Yusei Magic';font-size:34px;color:var(--paper);">✏️ いまみんな描いています！</div>
+      <div id="drawCountBig" style="font-family:'Yusei Magic';font-size:96px;line-height:1;color:var(--gold);font-weight:900;"></div>
+      <div style="font-size:16px;color:var(--sub);">できあがった絵は、このあとの投票でお披露目！</div>
+      <div style="display:flex;align-items:center;gap:18px;margin-top:6px;">
+        <div id="drawQr" style="background:#fff;border-radius:10px;padding:8px;"></div>
+        <div style="text-align:left;">
+          <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);">とちゅう参加もOK！</div>
+          <div style="font-size:13px;color:var(--sub);">スマホのカメラで読み取ってね</div>
+          <div style="font-size:13px;color:var(--sub);margin-top:6px;">💬 次に描いてほしいお題も<br>コメントで募集中！</div>
+        </div>
+      </div>
+    </div>
 
     <div class="hide" id="lobbyIdleDisp" style="flex:1;display:flex;flex-direction:column;">
       <div style="text-align:center;padding:4px 0 10px;">
@@ -221,7 +234,7 @@
       <p style="font-family:'Yusei Magic';font-size:22px;color:var(--gold);margin-top:14px;" id="resultNameDisp"></p>
     </div>
 
-    <div style="margin-top:14px;background:var(--stage-2);border:1px solid var(--line);border-radius:14px;padding:12px;" class="avaTopRow">
+    <div style="margin-top:8px;background:var(--stage-2);border:1px solid var(--line);border-radius:14px;padding:8px 12px;" class="avaTopRow">
       <div class="avaWrap"><img id="avaFaceDisp" alt="アバター"/></div>
       <div class="avaBubble hide" id="avaBubbleDisp"></div>
       <div style="margin-left:auto;background:var(--gold);color:#2a2410;border-radius:14px;padding:10px 16px;font-family:'Yusei Magic',sans-serif;font-weight:900;font-size:17px;line-height:1.5;white-space:nowrap;box-shadow:0 3px 8px rgba(0,0,0,.3);animation:cmtPulse 3s ease-in-out infinite;">💬 描いてほしいお題を<br>コメントにどうぞ！</div>
@@ -985,7 +998,9 @@ function renderDisplayPhase(room){
   if(room.phase === 'draw'){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
-    $('galleryDisp').classList.remove('hide');
+    $('galleryDisp').classList.add('hide');
+    $('drawIdleDisp').classList.remove('hide');
+    ensureDrawQr();
     { const p = parseOdai(room.odai);
       $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」' +
         (p.requester ? ' <span style="font-size:14px;color:var(--gold);">💬 '+escapeHtml(p.requester)+' さんのリクエスト</span>' : ''); }
@@ -996,12 +1011,17 @@ function renderDisplayPhase(room){
   } else if(room.phase === 'closed'){
     stopLobbyIdle();
     $('timerRowDisp').classList.add('hide');
+    $('galleryDisp').classList.add('hide');
+    $('drawIdleDisp').classList.remove('hide');
+    ensureDrawQr();
+    $('drawCountBig').textContent = '締切！';
     { const p = parseOdai(room.odai);
       $('odaiDisp').innerHTML = 'お題「'+escapeHtml(p.odai)+'」（締切）' +
         (p.requester ? ' <span style="font-size:14px;color:var(--gold);">💬 '+escapeHtml(p.requester)+' さんのリクエスト</span>' : ''); }
   } else if(room.phase === 'vote1' || room.phase === 'final'){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
+    $('drawIdleDisp').classList.add('hide');
     $('galleryDisp').classList.remove('hide');
     $('timerRowDisp').classList.add('hide');
     { const p = parseOdai(room.odai);
@@ -1018,6 +1038,7 @@ function renderDisplayPhase(room){
     $('voteCountdownDisp').textContent = '';
     stopLobbyIdle();
     $('galleryDisp').classList.add('hide');
+    $('drawIdleDisp').classList.add('hide');
     $('timerRowDisp').classList.add('hide');
     $('resultBlockDisp').classList.remove('hide');
     showDisplayResult(room.winner_submission_id);
@@ -1026,6 +1047,7 @@ function renderDisplayPhase(room){
     $('timerRowDisp').classList.add('hide');
     $('resultBlockDisp').classList.add('hide');
     $('galleryDisp').classList.add('hide');
+    $('drawIdleDisp').classList.add('hide');
     startLobbyIdle();
   }
 }
@@ -1034,6 +1056,30 @@ function startTimerDisp(seconds){
   const bar = $('timebarDisp');
   bar.style.transition='none'; bar.style.width='100%';
   requestAnimationFrame(()=>{ bar.style.transition='width '+Math.max(1,seconds)+'s linear'; bar.style.width='0%'; });
+  // にぎやかしパネルの大きな残り秒数
+  clearInterval(window._drawCountT);
+  let left = Math.max(0, Math.round(seconds));
+  const el = $('drawCountBig');
+  const tick = ()=>{
+    if(!el) return;
+    el.textContent = left > 0 ? ('のこり '+left+' 秒') : 'まもなく締切！';
+    if(left <= 0){ clearInterval(window._drawCountT); }
+    left--;
+  };
+  tick();
+  window._drawCountT = setInterval(tick, 1000);
+}
+
+/* 描画中パネルのQRコードを一度だけ生成 */
+function ensureDrawQr(){
+  const box = $('drawQr'); if(!box) return;
+  const joinUrl = location.origin + location.pathname + '?room=' + encodeURIComponent(ROOM_ID);
+  if(window._drawQrUrl === joinUrl) return;
+  if(typeof QRCode === 'undefined') return;
+  window._drawQrUrl = joinUrl;
+  box.innerHTML = '';
+  try{ new QRCode(box, { text: joinUrl, width: 110, height: 110, correctLevel: QRCode.CorrectLevel.M }); }
+  catch(e){ console.warn('QR生成に失敗:', e); }
 }
 
 function addThumbDisp(sub){
