@@ -98,7 +98,9 @@
     font-family:'Yusei Magic',sans-serif;
     color:#ffcb45;
     font-weight:900;
-    text-shadow:0 2px 0 #b8791a, 0 0 18px rgba(245,166,35,.6);
+    text-shadow:
+      -2px -2px 0 #7a4e0e, 2px -2px 0 #7a4e0e, -2px 2px 0 #7a4e0e, 2px 2px 0 #7a4e0e,
+      0 3px 0 #b8791a, 0 4px 6px rgba(0,0,0,.4);
   }
   .animTitle .ch{
     display:inline-block;
@@ -376,6 +378,7 @@
   <!-- ===== プレイヤー：ロビー待機 ===== -->
   <div class="hide" id="playerLobby" style="flex:1;display:flex;flex-direction:column;padding:16px;overflow-y:auto;">
     <div style="text-align:center;margin-bottom:14px;">
+      <div style="font-family:'Yusei Magic',sans-serif;font-size:26px;font-weight:900;color:#ffcb45;margin-bottom:10px;text-shadow:-1.5px -1.5px 0 #7a4e0e,1.5px -1.5px 0 #7a4e0e,-1.5px 1.5px 0 #7a4e0e,1.5px 1.5px 0 #7a4e0e,0 2px 4px rgba(0,0,0,.4);">みんなでお絵描き選手権</div>
       <p class="big" id="lobbyBig" style="margin:0;">お題が出るのを待っています<span class="dots"><span>.</span><span>.</span><span>.</span></span></p>
       <p class="sub" id="lobbyMsg" style="margin:4px 0 0;"></p>
       <p class="sub" id="lobbyHeadcount" style="margin:6px 0 0;color:var(--gold);"></p>
