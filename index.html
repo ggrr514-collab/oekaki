@@ -197,6 +197,7 @@
     <p id="voteCountdownDisp" style="font-family:'Yusei Magic';font-size:18px;color:#ff8a3d;text-align:center;margin:0 0 6px;min-height:22px;"></p>
     <div class="timer hide" id="timerRowDisp" style="margin:0 0 10px;"><div class="bar" id="timebarDisp"></div></div>
 
+    <div class="hide" id="progressGridDisp" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;justify-content:center;padding:4px;"></div>
     <div class="hgrid" id="galleryDisp" style="flex:1;min-height:0;overflow-y:auto;"></div>
     <div class="hide" id="drawIdleDisp" style="display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 12px;background:var(--stage-2);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;">
       <div style="font-family:'Yusei Magic';font-size:18px;color:var(--paper);">✏️ できた絵から、ここに登場！</div>
@@ -962,6 +963,7 @@ function runDisplayMode(roomId){
   setAvaExprGeneric('avaFaceDisp', 'neutral');
   subscribeAvatarListener();
   subscribeDisplaySubmissions();
+  subscribeProgressDisp();
   startHeadcountWatch();
 
   sb.from('rooms').select('*').eq('id', roomId).maybeSingle().then(({data, error})=>{
@@ -987,13 +989,15 @@ function renderDisplayPhase(room){
   if(room.round !== window._dispLastRound){
     window._dispLastRound = room.round;
     $('galleryDisp').innerHTML = '';
+    const pg = $('progressGridDisp'); if(pg) pg.innerHTML = '';
     window._dispVoteSub = null;
   }
 
   if(room.phase === 'draw'){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
-    $('galleryDisp').classList.remove('hide');
+    $('galleryDisp').classList.add('hide');
+    $('progressGridDisp').classList.remove('hide');
     $('drawIdleDisp').classList.remove('hide');
     ensureDrawQr();
     { const p = parseOdai(room.odai);
@@ -1006,7 +1010,8 @@ function renderDisplayPhase(room){
   } else if(room.phase === 'closed'){
     stopLobbyIdle();
     $('timerRowDisp').classList.add('hide');
-    $('galleryDisp').classList.remove('hide');
+    $('galleryDisp').classList.add('hide');
+    $('progressGridDisp').classList.remove('hide');
     $('drawIdleDisp').classList.remove('hide');
     ensureDrawQr();
     clearInterval(window._drawCountT);
@@ -1018,6 +1023,7 @@ function renderDisplayPhase(room){
     stopLobbyIdle();
     $('resultBlockDisp').classList.add('hide');
     $('drawIdleDisp').classList.add('hide');
+    $('progressGridDisp').classList.add('hide');
     $('galleryDisp').classList.remove('hide');
     $('timerRowDisp').classList.add('hide');
     { const p = parseOdai(room.odai);
@@ -1044,6 +1050,7 @@ function renderDisplayPhase(room){
     $('resultBlockDisp').classList.add('hide');
     $('galleryDisp').classList.add('hide');
     $('drawIdleDisp').classList.add('hide');
+    $('progressGridDisp').classList.add('hide');
     startLobbyIdle();
   }
 }
@@ -1079,6 +1086,16 @@ function ensureDrawQr(){
 }
 
 function addThumbDisp(sub){
+  // 途中経過カードがあれば「提出済み」の印に更新（最終形を描いて✅を付ける）
+  const pg = $('progressGridDisp');
+  if(pg && sub.device_id){
+    const card = pg.querySelector('[data-dev="'+sub.device_id+'"]');
+    if(card){
+      if(sub.strokes) renderStrokesStatic(card.querySelector('canvas'), sub.strokes);
+      const label = card.querySelector('div');
+      if(label) label.innerHTML = '✅ '+escapeHtml(sub.name||'')+'（提出！）';
+    }
+  }
   if(document.querySelector('#galleryDisp .thumb[data-sub="'+sub.id+'"]')) return;
   const g = $('galleryDisp');
   const el = document.createElement('div'); el.className='thumb'; el.dataset.sub=sub.id;
@@ -1108,7 +1125,34 @@ async function loadDisplayVoteCounts(round, stage, finalistIds){
   if(finalistIds && finalistIds.length) query = query.in('id', finalistIds);
   const { data: subs } = await query.order('created_at');
   $('galleryDisp').innerHTML = '';
-  (subs||[]).forEach(sub=>addThumbDisp(sub));
+
+  if(stage === 2){
+    // 決勝：ファイナリスト作品を大きく並べる（2〜3人なら特大、4〜5人でも大きめ）
+    const n = (subs||[]).length || 1;
+    const width = n <= 2 ? 'min(44vw, 620px)' : n === 3 ? 'min(30vw, 460px)' : 'min(23vw, 360px)';
+    const g = $('galleryDisp');
+    g.classList.remove('hgrid');
+    g.style.display = 'flex'; g.style.flexWrap = 'wrap'; g.style.gap = '18px';
+    g.style.alignItems = 'center'; g.style.justifyContent = 'center'; g.style.alignContent = 'center';
+    (subs||[]).forEach(sub=>{
+      const el = document.createElement('div');
+      el.className='thumb'; el.dataset.sub = sub.id;
+      el.style.cssText = 'width:'+width+';box-shadow:0 6px 18px rgba(0,0,0,.45);border-radius:12px;';
+      el.innerHTML = '<img src="'+sub.image_url+'" style="width:100%;border-radius:10px 10px 0 0;display:block;" alt="'+escapeHtml(sub.name)+'"/>'+
+        '<div class="n" style="font-size:18px;padding:6px 0;">🏆 '+escapeHtml(sub.name)+'</div>';
+      window._subData = window._subData || {};
+      window._subData[sub.id] = sub;
+      el.querySelector('img').addEventListener('click', ()=>openModal(sub.id));
+      g.appendChild(el);
+    });
+  } else {
+    // 予選：これまで通りの一覧グリッド
+    const g = $('galleryDisp');
+    g.classList.add('hgrid');
+    g.style.display = ''; g.style.flexWrap = ''; g.style.gap = '';
+    g.style.alignItems = ''; g.style.justifyContent = ''; g.style.alignContent = '';
+    (subs||[]).forEach(sub=>addThumbDisp(sub));
+  }
 
   // 公平のため、投票中は誰に何票入っているかを一切表示しない。
   // 票が入ったこと自体は「ポン」という音だけで伝える(結果は発表まで秘密)
@@ -2201,6 +2245,7 @@ async function joinRoom(role){
 
 function setLobby(bigText, msgText){
   stopVoteCountdown();
+  stopProgressBroadcast();
   // 待機画面以外（結果発表・描画・投票・提出済み）をすべて隠す
   ['resultScreen','drawScreen','voteScreen','submittedScreen'].forEach(id=>{ const el=$(id); if(el) el.classList.add('hide'); });
   $('lobbyBig').innerHTML = bigText + '<span class="dots"><span>.</span><span>.</span><span>.</span></span>';
@@ -2276,6 +2321,7 @@ function enterDraw(odai, startedAt, durationSec){
   const elapsed = (Date.now() - new Date(startedAt).getTime())/1000;
   const remain = Math.max(1, Math.round(durationSec - elapsed));
   startTimer(remain);
+  startProgressBroadcast();   // 10秒ごとに途中経過を配信画面へ
 }
 
 /* 練習モード：お題が無くても自由に描ける。提出も保存もされない */
@@ -2366,6 +2412,7 @@ function startTimer(seconds){
 /* ===================== 提出 ===================== */
 async function submitArt(){
   clearInterval(timer);
+  stopProgressBroadcast();
 
   const { data: banned } = await sb.from('banned_devices').select('device_id').eq('device_id', DEVICE_ID).maybeSingle();
   if(banned){
@@ -2700,6 +2747,72 @@ function fireConfetti(){
 }
 
 /* ===================== 描画リプレイ ===================== */
+/* 線データを一発で描き切る（途中経過のミニキャンバス用） */
+function renderStrokesStatic(canvas, strokesData){
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  for(const st of (strokesData||[])){
+    const pts = st.points||[]; if(!pts.length) continue;
+    ctx.save(); ctx.strokeStyle=st.color||'#000'; ctx.lineWidth=st.size||7;
+    ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    if(pts.length===1) ctx.lineTo(pts[0].x+0.1, pts[0].y+0.1);
+    ctx.stroke(); ctx.restore();
+  }
+}
+
+/* ---- 途中経過（描き手→配信画面へ10秒ごとに放送） ---- */
+function getProgressChannel(){
+  if(!window._progCh){
+    window._progCh = sb.channel('progress-'+ROOM_ID);
+    window._progCh.subscribe();
+  }
+  return window._progCh;
+}
+/* 配信画面：途中経過を受け取ってミニキャンバスに描く */
+function subscribeProgressDisp(){
+  const ch = sb.channel('progress-recv-'+ROOM_ID);
+  ch.on('broadcast', { event:'progress' }, ({ payload })=>{
+    if(!payload || payload.round !== window._dispLastRound) return;
+    if(window._dispPhase !== 'draw' && window._dispPhase !== 'closed') return;
+    const grid = $('progressGridDisp'); if(!grid) return;
+    let card = grid.querySelector('[data-dev="'+payload.device_id+'"]');
+    if(!card){
+      card = document.createElement('div');
+      card.dataset.dev = payload.device_id;
+      card.style.cssText = 'width:240px;background:#fff;border-radius:10px;padding:6px 6px 2px;box-shadow:0 2px 8px rgba(0,0,0,.35);';
+      card.innerHTML = '<canvas style="width:100%;border-radius:6px;display:block;"></canvas>'+
+        '<div style="font-size:12px;color:#333;text-align:center;padding:3px 0;font-weight:700;">✏️ '+escapeHtml(payload.name||'')+'</div>';
+      grid.appendChild(card);
+    }
+    renderStrokesStatic(card.querySelector('canvas'), payload.strokes);
+  });
+  ch.subscribe();
+}
+/* 描き手：10秒ごとに今の線データを放送する */
+function startProgressBroadcast(){
+  stopProgressBroadcast();
+  window._progT = setInterval(()=>{
+    try{
+      if(window._practiceMode) return;
+      if(!strokes || !strokes.length) return;
+      const json = JSON.stringify(strokes);
+      if(json.length > 200000) return;             // 大きすぎる時は送らない（安全弁）
+      if(json === window._progLastSent) return;    // 変化が無ければ送らない
+      window._progLastSent = json;
+      getProgressChannel().send({ type:'broadcast', event:'progress',
+        payload: { device_id: DEVICE_ID, name: PLAYER_NAME, round: CURRENT_ROUND, strokes: strokes } });
+    }catch(e){ /* 送信失敗は無視（次の10秒で再送） */ }
+  }, 10000);
+}
+function stopProgressBroadcast(){
+  clearInterval(window._progT);
+  window._progLastSent = null;
+}
+
 function replayStrokes(canvas, strokesData, durationMs){
   const dpr = Math.min(window.devicePixelRatio||1,2);
   canvas.width = W*dpr; canvas.height = H*dpr;
