@@ -208,17 +208,22 @@
       </div>
     </div>
 
-    <div class="hide" id="lobbyIdleDisp" style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;">
-      <div style="text-align:center;padding:4px 0 10px;">
-        <div class="animTitle" id="lobbyTitleAnim" style="font-size:36px;margin-bottom:4px;">秒速お絵描き選手権</div>
-        <div style="font-family:'Yusei Magic';font-size:15px;color:var(--sub);">参加はチャットのピン留めリンクから ─ 部屋コード</div>
-        <div style="font-family:'Yusei Magic';font-size:26px;color:var(--gold);" id="lobbyRoomCodeBig"></div>
-        <div style="font-size:15px;color:var(--paper);margin-top:6px;word-break:break-all;" id="lobbyJoinUrl"></div>
-        <div id="lobbyQr" style="display:inline-block;margin-top:6px;padding:7px;background:#fff;border-radius:10px;"></div>
-        <div style="font-size:12px;color:var(--sub);margin-top:6px;">スマホのカメラで読み取って参加できます</div>
-        <div style="font-family:'Yusei Magic';font-size:18px;color:var(--gold);margin-top:10px;" id="lobbyHeadcountDisp"></div>
+    <div class="hide" id="lobbyIdleDisp" style="flex:1;min-height:0;display:flex;flex-direction:row;gap:20px;overflow:hidden;align-items:stretch;">
+      <!-- 左：固定情報（タイトル・趣旨・参加方法・人数） -->
+      <div style="flex:none;width:360px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:10px;padding:6px;">
+        <div class="animTitle" id="lobbyTitleAnim" style="font-size:34px;">秒速お絵描き選手権</div>
+        <div style="background:var(--stage-2);border:1px solid var(--gold);border-radius:12px;padding:10px 12px;font-size:13.5px;line-height:1.7;color:var(--paper);">
+          🎨 みんなで気軽にお絵描きを楽しむ、<b style="color:var(--gold);">視聴者参加型ライブ</b>！<br>
+          絵の上手さは関係なし。<b style="color:var(--gold);">90秒</b>で描いて、<br>おもしろい絵に<b style="color:var(--gold);">花丸</b>を贈り合おう！
+        </div>
+        <div id="lobbyQr" style="display:inline-block;padding:7px;background:#fff;border-radius:10px;"></div>
+        <div style="font-size:11px;color:var(--sub);margin-top:-4px;">スマホのカメラで読み取って参加</div>
+        <div style="font-family:'Yusei Magic';font-size:13px;color:var(--sub);">部屋コード <span id="lobbyRoomCodeBig" style="font-size:20px;color:var(--gold);"></span></div>
+        <div style="font-size:11.5px;color:var(--paper);word-break:break-all;line-height:1.4;" id="lobbyJoinUrl"></div>
+        <div style="font-family:'Yusei Magic';font-size:16px;color:var(--gold);" id="lobbyHeadcountDisp"></div>
       </div>
-      <div id="lobbyContent" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;"></div>
+      <!-- 右：スライド（優勝作品・ランキング・あそびかた） -->
+      <div id="lobbyContent" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;padding:10px 6px;"></div>
     </div>
 
     <div class="hide" id="resultBlockDisp" style="text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
@@ -1283,10 +1288,10 @@ async function renderLobbyWinners(box){
   window._lobbyWinnersCache.forEach(s=>{ window._subData[s.id] = s; });
 
   const card = (s)=>
-    '<div style="flex:none;width:200px;text-align:center;cursor:pointer;" onclick="openModal(\''+s.id+'\')">'+
+    '<div style="flex:none;width:210px;text-align:center;cursor:pointer;" onclick="openModal(\''+s.id+'\')">'+
       '<img src="'+s.image_url+'" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;background:#fff;"/>'+
-      '<div style="margin-top:6px;font-size:12px;color:var(--gold);">「'+escapeHtml(s.odai||'')+'」</div>'+
-      '<div style="font-size:12px;color:var(--paper);">'+escapeHtml(s.name)+'さん</div>'+
+      '<div style="margin-top:6px;font-size:14px;line-height:1.45;color:var(--gold);white-space:normal;word-break:break-word;">「'+escapeHtml(s.odai||'')+'」</div>'+
+      '<div style="font-size:12px;color:var(--paper);margin-top:2px;">'+escapeHtml(s.name)+'さん</div>'+
     '</div>';
   // 継ぎ目なくループさせるため、リストを2回並べる
   const items = window._lobbyWinnersCache.map(card).join('') + window._lobbyWinnersCache.map(card).join('');
