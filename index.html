@@ -220,10 +220,13 @@
         <div style="font-size:11px;color:var(--sub);margin-top:-4px;">スマホのカメラで読み取って参加</div>
         <div style="font-family:'Yusei Magic';font-size:13px;color:var(--sub);">部屋コード <span id="lobbyRoomCodeBig" style="font-size:20px;color:var(--gold);"></span></div>
         <div style="font-size:11.5px;color:var(--paper);word-break:break-all;line-height:1.4;" id="lobbyJoinUrl"></div>
-        <div style="font-family:'Yusei Magic';font-size:16px;color:var(--gold);" id="lobbyHeadcountDisp"></div>
+        <div style="font-family:'Yusei Magic';font-size:17px;line-height:1.6;color:var(--gold);" id="lobbyHeadcountDisp"></div>
       </div>
       <!-- 右：スライド（優勝作品・ランキング・あそびかた） -->
-      <div id="lobbyContent" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;padding:10px 6px;"></div>
+      <!-- 右：スライドは中央寄せのカードに収める -->
+      <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px;">
+        <div id="lobbyContent" style="background:var(--stage-2);border:1px solid var(--line);border-radius:16px;padding:20px 24px;width:min(96%,780px);max-height:100%;overflow-y:auto;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;transition:opacity .4s;box-shadow:0 6px 20px rgba(0,0,0,.3);"></div>
+      </div>
     </div>
 
     <div class="hide" id="resultBlockDisp" style="text-align:center;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;">
@@ -1204,7 +1207,7 @@ function startLobbyIdle(){
   if(qrBox && window._qrUrl !== joinUrl && typeof QRCode !== 'undefined'){
     window._qrUrl = joinUrl;
     qrBox.innerHTML = '';
-    try{ new QRCode(qrBox, { text: joinUrl, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M }); }
+    try{ new QRCode(qrBox, { text: joinUrl, width: 140, height: 140, correctLevel: QRCode.CorrectLevel.M }); }
     catch(e){ console.warn('QR生成に失敗:', e); }
   }
 
